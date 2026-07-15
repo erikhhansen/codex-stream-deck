@@ -1,0 +1,14 @@
+node_modules/
+coverage/
+.test-logs/
+.env
+.env.*
+*.log
+*.tmp
+__pycache__/
+*.py[cod]
+*.streamDeckPlugin
+com.codexstreamdeck.control.sdPlugin/bin/
+com.codexstreamdeck.control.sdPlugin/logs/
+.DS_Store
+Thumbs.db

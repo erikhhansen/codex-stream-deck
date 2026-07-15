@@ -1,0 +1,14 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+## 0.1.0 — 2026-07-15
+
+- Initial public release of Codex Control for Stream Deck.
+- Added recent-task buttons with meaningful Codex task titles, workflow states, freshness, and attention indicators.
+- Added exact-task opening, safe status checks, refresh, task creation, editor, review, interrupt, health, settings, and skills actions.
+- Added optional loopback-only, token-authenticated passive notify bridge with atomic spool fallback.
+- Added strict status schema, bounded local cache, secret-redacted logs, and defensive approval rejection.
+- Added security hardening for app-server messages, persisted settings, notify events, Python helpers, Property Inspector CSP, and release privacy.
+- Added setup, architecture, development, security, and release documentation.
+- Adopted the MIT license and neutral, non-identifying release metadata.
