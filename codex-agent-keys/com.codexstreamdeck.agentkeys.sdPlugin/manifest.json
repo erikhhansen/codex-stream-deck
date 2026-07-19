@@ -1,0 +1,203 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Actions": [
+    {
+      "Name": "Codex Session",
+      "UUID": "com.codexstreamdeck.agentkeys.session",
+      "Icon": "imgs/session",
+      "PropertyInspectorPath": "ui/property-inspector.html",
+      "Tooltip": "Pin one Codex session and show when it needs attention.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/key",
+          "ShowTitle": true,
+          "TitleAlignment": "middle",
+          "TitleColor": "#17202B",
+          "FontSize": 18,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "Approve",
+      "UUID": "com.codexstreamdeck.agentkeys.approve",
+      "Icon": "imgs/approve",
+      "Tooltip": "Approve the active request in the selected Codex session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/approve",
+          "ShowTitle": true,
+          "Title": "APPROVE",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 10,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "Reject",
+      "UUID": "com.codexstreamdeck.agentkeys.reject",
+      "Icon": "imgs/reject",
+      "Tooltip": "Reject the active request in the selected Codex session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/reject",
+          "ShowTitle": true,
+          "Title": "REJECT",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 10,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "Terminal",
+      "UUID": "com.codexstreamdeck.agentkeys.terminal",
+      "Icon": "imgs/terminal",
+      "Tooltip": "Toggle the terminal for the selected Codex session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/terminal",
+          "ShowTitle": true,
+          "Title": "TERMINAL",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 9,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "Review",
+      "UUID": "com.codexstreamdeck.agentkeys.review",
+      "Icon": "imgs/review",
+      "Tooltip": "Toggle review for the selected Codex session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/review",
+          "ShowTitle": true,
+          "Title": "REVIEW",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 10,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "Dictate",
+      "UUID": "com.codexstreamdeck.agentkeys.voice",
+      "Icon": "imgs/voice",
+      "Tooltip": "Dictate into the selected Codex session's composer.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/voice",
+          "ShowTitle": true,
+          "Title": "DICTATE",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 10,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "VS Code",
+      "UUID": "com.codexstreamdeck.agentkeys.vscode",
+      "Icon": "imgs/vscode",
+      "Tooltip": "Open the selected Codex session's repository in VS Code.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/vscode",
+          "ShowTitle": true,
+          "Title": "VS CODE",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 10,
+          "FontStyle": "Bold"
+        }
+      ]
+    }
+  ],
+  "Author": "Codex Agent Keys Contributors",
+  "Category": "Codex Agent Keys",
+  "CategoryIcon": "imgs/category",
+  "CodePath": "bin/plugin.js",
+  "Description": "Large, color-coded keys for pinned Codex sessions.",
+  "Icon": "imgs/plugin",
+  "Name": "Codex Agent Keys",
+  "Nodejs": {
+    "Version": "24"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "7.1"
+  },
+  "UUID": "com.codexstreamdeck.agentkeys",
+  "Version": "0.3.15.0"
+}

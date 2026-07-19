@@ -1,0 +1,33 @@
+{
+  "name": "codex-agent-keys",
+  "version": "0.3.15",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "icons": "node scripts/generate-plugin-icons.mjs",
+    "build": "npm run build:native && rollup --config",
+    "build:native": "xcrun swiftc native/codex-command.swift -o com.codexstreamdeck.agentkeys.sdPlugin/bin/codex-command -module-cache-path /private/tmp/codex-agent-keys-swift-cache",
+    "dev": "rollup --config --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "validate": "streamdeck validate com.codexstreamdeck.agentkeys.sdPlugin --no-update-check",
+    "pack": "npm run icons && npm run build && streamdeck pack com.codexstreamdeck.agentkeys.sdPlugin --force --no-update-check"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "2.1.0"
+  },
+  "devDependencies": {
+    "@elgato/cli": "1.7.4",
+    "@rollup/plugin-commonjs": "29.0.0",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "@rollup/plugin-typescript": "12.3.0",
+    "@types/node": "24.10.13",
+    "rollup": "4.62.2",
+    "tslib": "2.8.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

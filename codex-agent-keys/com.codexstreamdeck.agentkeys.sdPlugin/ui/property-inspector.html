@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src ws://127.0.0.1:*" />
+    <title>Codex Agent Keys</title>
+    <link rel="stylesheet" href="property-inspector.css" />
+  </head>
+  <body>
+    <main>
+      <section class="connection"><span id="dot"></span><strong id="connection">Starting</strong><p id="error"></p></section>
+      <section>
+        <h2>This key</h2>
+        <label>Codex session<select id="session"><option value="">Choose a session…</option></select></label>
+        <label>Key name<input id="display-name" type="text" maxlength="20" placeholder="Uses the session name" /></label>
+        <p class="hint">Tap the key to select and open this exact Codex session.</p>
+        <p class="hint" id="active-target">No active target</p>
+        <button id="clear-active">Clear active target</button>
+        <button id="refresh">Refresh sessions</button>
+      </section>
+      <section>
+        <h2>Connection</h2>
+        <label>Codex executable<input id="codex-path" type="text" /></label>
+        <button id="test">Test connection</button>
+      </section>
+      <output id="result" aria-live="polite"></output>
+    </main>
+    <script src="property-inspector.js"></script>
+  </body>
+</html>
