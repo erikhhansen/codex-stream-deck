@@ -172,6 +172,23 @@
           "FontStyle": "Bold"
         }
       ]
+    },
+    {
+      "Name": "Codex Usage",
+      "UUID": "com.codexstreamdeck.agentkeys.usage",
+      "Icon": "imgs/usage",
+      "Tooltip": "Show the percentage of Codex usage remaining before the next limit.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/usage",
+          "ShowTitle": false
+        }
+      ]
     }
   ],
   "Author": "Codex Agent Keys Contributors",
@@ -199,5 +216,5 @@
     "MinimumVersion": "7.1"
   },
   "UUID": "com.codexstreamdeck.agentkeys",
-  "Version": "0.3.15.0"
+  "Version": "0.3.16.0"
 }

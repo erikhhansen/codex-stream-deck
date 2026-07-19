@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import type { RpcId } from "./approval.js";
-import type { CodexThread } from "./types.js";
+import type { CodexThread, RateLimitsResponse } from "./types.js";
 
 interface Pending {
   resolve: (value: unknown) => void;
@@ -47,7 +47,7 @@ export class CodexClient extends EventEmitter {
       child.once("error", reject);
     });
     await this.request("initialize", {
-      clientInfo: { name: "codex_agent_keys", title: "Codex Agent Keys", version: "0.3.15" }
+      clientInfo: { name: "codex_agent_keys", title: "Codex Agent Keys", version: "0.3.16" }
     }, 15_000);
     this.notify("initialized", {});
   }
@@ -69,7 +69,7 @@ export class CodexClient extends EventEmitter {
     this.#rejectAll(new Error("Codex app-server stopped"));
   }
 
-  request<T = unknown>(method: string, params: Record<string, unknown>, timeoutMs = 15_000): Promise<T> {
+  request<T = unknown>(method: string, params: Record<string, unknown> | null, timeoutMs = 15_000): Promise<T> {
     if (!this.#child?.stdin.writable) return Promise.reject(new Error("Codex is not connected"));
     const id = this.#nextId++;
     return new Promise<T>((resolve, reject) => {
@@ -102,6 +102,10 @@ export class CodexClient extends EventEmitter {
       archived: false
     }, 30_000);
     return Array.isArray(response.data) ? response.data : [];
+  }
+
+  readRateLimits(): Promise<RateLimitsResponse> {
+    return this.request<RateLimitsResponse>("account/rateLimits/read", null, 15_000);
   }
 
   #send(message: Record<string, unknown>): void {

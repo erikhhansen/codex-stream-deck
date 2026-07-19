@@ -33,4 +33,17 @@ run("Codex app-server reconnect", () => {
       await client.stop();
     }
   }, 30_000);
+
+  it("can read the authenticated account rate limits", async () => {
+    const client = new CodexClient();
+    const executable = process.env.CODEX_PATH || "/Applications/Codex.app/Contents/Resources/codex";
+    try {
+      await client.start(executable);
+      const response = await client.readRateLimits();
+      expect(response.rateLimits).toBeTruthy();
+      expect(response.rateLimits.primary?.usedPercent ?? response.rateLimits.secondary?.usedPercent).toBeTypeOf("number");
+    } finally {
+      await client.stop();
+    }
+  }, 30_000);
 });

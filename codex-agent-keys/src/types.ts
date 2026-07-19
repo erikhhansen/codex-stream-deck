@@ -35,4 +35,20 @@ export interface StatusView {
   foreground: string;
   flashing: boolean;
 }
+
+export interface RateLimitWindow {
+  usedPercent: number;
+  windowDurationMins?: number | null;
+  resetsAt?: number | null;
+}
+
+export interface RateLimitSnapshot {
+  primary?: RateLimitWindow | null;
+  secondary?: RateLimitWindow | null;
+}
+
+export interface RateLimitsResponse {
+  rateLimits: RateLimitSnapshot;
+  rateLimitsByLimitId?: Record<string, RateLimitSnapshot> | null;
+}
 import type { JsonObject } from "@elgato/utils";

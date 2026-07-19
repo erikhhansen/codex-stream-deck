@@ -12,6 +12,7 @@ The **Codex Session** action pins, selects, and opens one exact Codex thread. Gu
 - **Review** — toggle its review view.
 - **Dictate** — press Codex's real Dictate control in its composer.
 - **VS Code** — focus or open the Git repository for the selected task.
+- **Codex Usage** — show the most constrained remaining allowance as a percentage; the footer shows both the rolling 5-hour and weekly windows.
 
 1. Drag it onto a Stream Deck key.
 2. Select the exact Codex session to pin.

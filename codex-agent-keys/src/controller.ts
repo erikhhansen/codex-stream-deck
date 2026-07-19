@@ -6,7 +6,7 @@ import { CodexClient } from "./codex-client.js";
 import { readSessionActivity } from "./session-activity.js";
 import { normalizeThreadId, requireThreadId } from "./selection.js";
 import { statusFor } from "./status.js";
-import type { CodexThread, ConnectionState, GlobalSettings, LocalActivity, StatusView, ThreadStatus } from "./types.js";
+import type { CodexThread, ConnectionState, GlobalSettings, LocalActivity, RateLimitSnapshot, StatusView, ThreadStatus } from "./types.js";
 
 const DEFAULT_CODEX_PATH = process.platform === "darwin" ? "/Applications/Codex.app/Contents/Resources/codex" : "codex";
 
@@ -22,6 +22,9 @@ class AgentKeysController {
   #lastError = "";
   #codexPath = DEFAULT_CODEX_PATH;
   #activeThreadId = "";
+  #rateLimits: RateLimitSnapshot | undefined;
+  #usageError = "";
+  #lastUsageRefreshAt = 0;
   #pollTimer: NodeJS.Timeout | undefined;
   #flashTimer: NodeJS.Timeout | undefined;
   #activityTimer: NodeJS.Timeout | undefined;
@@ -52,6 +55,14 @@ class AgentKeysController {
 
   get activeThreadId(): string {
     return this.#activeThreadId;
+  }
+
+  get rateLimits(): RateLimitSnapshot | undefined {
+    return this.#rateLimits;
+  }
+
+  get usageError(): string {
+    return this.#usageError;
   }
 
   async start(): Promise<void> {
@@ -161,9 +172,22 @@ class AgentKeysController {
   async refresh(): Promise<void> {
     if (!this.#client.connected) return this.reconnect();
     this.#threads = await this.#client.listThreads();
+    if (Date.now() - this.#lastUsageRefreshAt >= 60_000) await this.#refreshUsageSilently();
     await this.#refreshLocalActivity();
     this.#connection = "connected";
     this.#lastError = "";
+    this.#emit();
+  }
+
+  async refreshUsage(): Promise<void> {
+    if (!this.#client.connected) {
+      await this.reconnect();
+      if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
+    }
+    const response = await this.#client.readRateLimits();
+    this.#rateLimits = response.rateLimitsByLimitId?.codex ?? response.rateLimits;
+    this.#usageError = "";
+    this.#lastUsageRefreshAt = Date.now();
     this.#emit();
   }
 
@@ -199,9 +223,19 @@ class AgentKeysController {
     }
     if (method === "turn/started" && threadId) this.#completedUntil.delete(threadId);
     if (method === "serverRequest/resolved") this.#removePendingApproval(params.requestId);
+    if (method === "account/rateLimits/updated") void this.#refreshUsageSilently();
     if (["turn/completed", "thread/closed"].includes(method) && threadId) this.#pendingApprovals.delete(threadId);
     this.#emit();
     if (["turn/completed", "thread/started", "thread/closed"].includes(method)) setTimeout(() => void this.refresh(), 250);
+  }
+
+  async #refreshUsageSilently(): Promise<void> {
+    try {
+      await this.refreshUsage();
+    } catch (error) {
+      this.#usageError = error instanceof Error ? error.message : "Usage unavailable";
+      this.#emit();
+    }
   }
 
   #onServerRequest(id: RpcId, method: string, params: Record<string, unknown>): void {
