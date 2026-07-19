@@ -17,7 +17,15 @@ describe("Codex usage key", () => {
   it("renders an unavailable state without inventing usage", () => {
     const svg = renderUsageKey(undefined, "not connected");
     expect(svg).toContain("—");
-    expect(svg).toContain("UNAVAILABLE");
+    expect(svg).not.toContain("CODEX LEFT");
+    expect(svg).not.toContain("UNAVAILABLE");
+  });
+
+  it("keeps the key face limited to the large percentage", () => {
+    const svg = renderUsageKey({ primary: { usedPercent: 18 }, secondary: { usedPercent: 61 } });
+    expect(svg).toContain("39");
+    expect(svg).not.toContain("5H");
+    expect(svg).not.toContain("WK");
   });
 
   it("changes the dominant color as the remaining allowance falls", () => {
