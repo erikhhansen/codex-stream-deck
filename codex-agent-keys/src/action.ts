@@ -11,6 +11,7 @@ import streamDeck, {
 import type { JsonValue } from "@elgato/utils";
 
 import { controller } from "./controller.js";
+import { completionEmailNotifier } from "./completion-email.js";
 import { openThread } from "./native.js";
 import { renderKey, svgDataUrl, wrapTitle } from "./renderer.js";
 import type { KeySettings } from "./types.js";
@@ -23,6 +24,7 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
   constructor() {
     super();
     controller.onChange(() => this.#scheduleRender());
+    controller.onTurnCompleted((threadId) => void this.#queueCompletionEmail(threadId));
   }
 
   override async onWillAppear(event: WillAppearEvent<KeySettings>): Promise<void> {
@@ -59,6 +61,15 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
       if (message.op === "refresh") await controller.refresh();
       if (message.op === "test") await controller.reconnect();
       if (message.op === "clearActive") await controller.clearActiveThread();
+      if (message.op === "validateEmail") {
+        const status = await completionEmailNotifier.validate();
+        await streamDeck.ui.sendToPropertyInspector({
+          type: "result",
+          ok: true,
+          message: `SendGrid sandbox validated (${status}); no email was sent.`
+        });
+        return;
+      }
       const settings = await event.action.getSettings<KeySettings>();
       await streamDeck.ui.sendToPropertyInspector(controller.inspectorState(settings.threadId));
     } catch (error) {
@@ -84,6 +95,24 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
       const key = item as KeyAction<KeySettings>;
       await this.#render(key, await key.getSettings<KeySettings>());
     }));
+  }
+
+  async #queueCompletionEmail(threadId: string): Promise<void> {
+    const configuredName = controller.configuredAgentName(threadId);
+    if (configuredName) {
+      completionEmailNotifier.enqueue(threadId, configuredName, () => controller.completionEmailStats(threadId));
+      return;
+    }
+    for (const item of this.actions) {
+      if (!item.isKey()) continue;
+      const key = item as KeyAction<KeySettings>;
+      const settings = await key.getSettings<KeySettings>();
+      if (settings.threadId?.trim() !== threadId) continue;
+      const thread = controller.thread(threadId);
+      const name = settings.displayName?.trim() || thread?.name || thread?.preview || "Codex agent";
+      completionEmailNotifier.enqueue(threadId, name, () => controller.completionEmailStats(threadId));
+      return;
+    }
   }
 
   async #render(key: KeyAction<KeySettings>, settings: KeySettings): Promise<void> {

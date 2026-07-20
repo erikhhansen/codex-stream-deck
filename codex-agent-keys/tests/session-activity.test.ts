@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activityFromJsonl } from "../src/session-activity.js";
+import { activityFromJsonl, didFinishWork } from "../src/session-activity.js";
 
 const event = (timestamp: string, type: string): string => JSON.stringify({ timestamp, type: "event_msg", payload: { type } });
 
@@ -11,10 +11,10 @@ describe("cross-client session activity", () => {
     expect(activityFromJsonl(event("2026-07-18T15:59:30.000Z", "task_started"), now)).toBe("thinking");
   });
 
-  it("shows completion briefly and then changes to waiting", () => {
+  it("shows completion briefly and then changes to idle", () => {
     const line = event("2026-07-18T15:59:55.000Z", "task_complete");
     expect(activityFromJsonl(line, now)).toBe("complete");
-    expect(activityFromJsonl(line, now + 20_000)).toBe("waiting");
+    expect(activityFromJsonl(line, now + 20_000)).toBe("idle");
   });
 
   it("uses only the newest lifecycle event", () => {
@@ -34,6 +34,13 @@ describe("cross-client session activity", () => {
   });
 
   it("does not leave old agent activity marked as thinking", () => {
-    expect(activityFromJsonl(event("2026-07-18T15:00:00.000Z", "agent_message"), now)).toBe("waiting");
+    expect(activityFromJsonl(event("2026-07-18T15:00:00.000Z", "agent_message"), now)).toBe("idle");
+  });
+
+  it("notifies only on a real cross-client thinking-to-complete transition", () => {
+    expect(didFinishWork("thinking", "complete")).toBe(true);
+    expect(didFinishWork(undefined, "complete")).toBe(false);
+    expect(didFinishWork("complete", "idle")).toBe(false);
+    expect(didFinishWork("idle", "complete")).toBe(false);
   });
 });

@@ -25,6 +25,10 @@ interface LifecycleEvent {
   at: number;
 }
 
+export function didFinishWork(previous: LocalActivity | undefined, next: LocalActivity): boolean {
+  return previous === "thinking" && next === "complete";
+}
+
 export function activityFromJsonl(text: string, now = Date.now()): LocalActivity | undefined {
   let latest: LifecycleEvent | undefined;
   let latestAgentActivityAt: number | undefined;
@@ -46,11 +50,11 @@ export function activityFromJsonl(text: string, now = Date.now()): LocalActivity
   }
   if (!latest) {
     if (latestAgentActivityAt === undefined) return undefined;
-    return now - latestAgentActivityAt <= RECENT_AGENT_ACTIVITY_MILLISECONDS ? "thinking" : "waiting";
+    return now - latestAgentActivityAt <= RECENT_AGENT_ACTIVITY_MILLISECONDS ? "thinking" : "idle";
   }
   if (latest.type === "task_failed" || latest.type === "turn_aborted") return "error";
-  if (latest.type === "task_started") return now - latest.at <= MAX_ACTIVE_MILLISECONDS ? "thinking" : "waiting";
-  return now - latest.at <= COMPLETE_MILLISECONDS ? "complete" : "waiting";
+  if (latest.type === "task_started") return now - latest.at <= MAX_ACTIVE_MILLISECONDS ? "thinking" : "idle";
+  return now - latest.at <= COMPLETE_MILLISECONDS ? "complete" : "idle";
 }
 
 export async function readSessionActivity(filePath: string, now = Date.now()): Promise<LocalActivity | undefined> {

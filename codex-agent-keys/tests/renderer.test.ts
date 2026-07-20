@@ -28,7 +28,7 @@ describe("session key renderer", () => {
   });
 
   it("changes dominant colors across flash phases", () => {
-    const state = statusFor({ id: "1", status: { type: "idle" } }, "connected", false);
+    const state = statusFor({ id: "1", status: { type: "idle", activeFlags: ["waitingOnUserInput"] } }, "connected", false);
     expect(renderKey(state, true)).toContain('fill="#FFD86B"');
     expect(renderKey(state, false)).toContain('fill="#FFF0B3"');
     expect(renderKey(state, false)).toContain('fill="#2B2307"');
