@@ -1,6 +1,6 @@
 export type ConnectionState = "starting" | "connected" | "error";
 export type KeyStatus = "unassigned" | "idle" | "thinking" | "complete" | "waiting" | "error";
-export type LocalActivity = "thinking" | "complete" | "waiting" | "error";
+export type LocalActivity = "idle" | "thinking" | "complete" | "error";
 
 export interface ThreadStatus {
   type: string;
@@ -26,7 +26,19 @@ export type KeySettings = {
 export type GlobalSettings = {
   codexPath?: string;
   activeThreadId?: string;
+  completionEmailEnabled?: boolean;
+  completionEmailSender?: string;
+  completionEmailRecipient?: string;
 } & JsonObject;
+
+export interface CompletionEmailStats {
+  project?: string | undefined;
+  model?: string | undefined;
+  effort?: string | undefined;
+  speed?: string | undefined;
+  usageRemaining?: number | undefined;
+  completedAt?: string | undefined;
+}
 
 export interface StatusView {
   status: KeyStatus;
@@ -50,5 +62,11 @@ export interface RateLimitSnapshot {
 export interface RateLimitsResponse {
   rateLimits: RateLimitSnapshot;
   rateLimitsByLimitId?: Record<string, RateLimitSnapshot> | null;
+}
+
+export interface ThreadRuntimeSettings {
+  model: string;
+  serviceTier: string | null;
+  reasoningEffort: string | null;
 }
 import type { JsonObject } from "@elgato/utils";

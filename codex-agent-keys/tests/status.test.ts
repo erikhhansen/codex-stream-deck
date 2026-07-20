@@ -31,7 +31,11 @@ describe("minimal session status", () => {
     expect(statusFor(thread("active", ["waitingOnUserInput"]), "connected", false)).toMatchObject({ status: "waiting", flashing: true });
   });
 
-  it("treats an idle loaded session as waiting for the user to continue", () => {
-    expect(statusFor(thread("idle"), "connected", false)).toMatchObject({ label: "WAITING", flashing: true });
+  it("flashes yellow for an approval request held by the plugin", () => {
+    expect(statusFor(thread("idle"), "connected", false, "idle", true)).toMatchObject({ label: "APPROVAL", flashing: true });
+  });
+
+  it("does not treat an ordinary idle session as waiting for input", () => {
+    expect(statusFor(thread("idle"), "connected", false, "idle")).toMatchObject({ label: "IDLE", flashing: false });
   });
 });

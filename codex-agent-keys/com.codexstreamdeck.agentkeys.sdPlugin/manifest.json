@@ -189,6 +189,91 @@
           "ShowTitle": false
         }
       ]
+    },
+    {
+      "Name": "Tokens Today",
+      "UUID": "com.codexstreamdeck.agentkeys.tokens-today",
+      "Icon": "imgs/tokens-today",
+      "Tooltip": "Show total Codex tokens recorded on this Mac since local midnight.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/tokens-today",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Speed",
+      "UUID": "com.codexstreamdeck.agentkeys.speed",
+      "Icon": "imgs/speed",
+      "Tooltip": "Show the active Codex session's Standard or Fast speed.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/speed",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Model",
+      "UUID": "com.codexstreamdeck.agentkeys.model",
+      "Icon": "imgs/model",
+      "Tooltip": "Show the active Codex session's model.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/model",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Effort",
+      "UUID": "com.codexstreamdeck.agentkeys.effort",
+      "Icon": "imgs/effort",
+      "Tooltip": "Show the active Codex session's reasoning-effort level.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/effort",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Merge Gate (Beta)",
+      "UUID": "com.codexstreamdeck.agentkeys.merge-gate",
+      "Icon": "imgs/merge-gate",
+      "Tooltip": "Show the highest delivery blocker for the selected Codex task and open its evidence.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/merge-gate",
+          "ShowTitle": false
+        }
+      ]
     }
   ],
   "Author": "Codex Agent Keys Contributors",
@@ -216,5 +301,5 @@
     "MinimumVersion": "7.1"
   },
   "UUID": "com.codexstreamdeck.agentkeys",
-  "Version": "0.3.16.0"
+  "Version": "0.4.1.0"
 }

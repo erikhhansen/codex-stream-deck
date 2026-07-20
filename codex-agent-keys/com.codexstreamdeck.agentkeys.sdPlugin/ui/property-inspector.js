@@ -22,6 +22,9 @@ window.connectElgatoStreamDeckSocket = function (port, propertyInspectorUuid, re
     if (message.event === "didReceiveGlobalSettings") {
       globalSettings = message.payload.settings || {};
       document.getElementById("codex-path").value = globalSettings.codexPath || "/Applications/Codex.app/Contents/Resources/codex";
+      document.getElementById("email-sender").value = globalSettings.completionEmailSender || "codex@haldanconsulting.com";
+      document.getElementById("email-recipient").value = globalSettings.completionEmailRecipient || "ehansen@haldanconsulting.com";
+      document.getElementById("email-enabled").checked = globalSettings.completionEmailEnabled === true;
       updateActiveTarget(globalSettings.activeThreadId || "");
     }
     if (message.event === "sendToPropertyInspector") receive(message.payload || {});
@@ -81,3 +84,16 @@ document.getElementById("codex-path").addEventListener("change", (event) => {
 document.getElementById("refresh").addEventListener("click", () => sendToPlugin({ op: "refresh" }));
 document.getElementById("clear-active").addEventListener("click", () => sendToPlugin({ op: "clearActive" }));
 document.getElementById("test").addEventListener("click", () => sendToPlugin({ op: "test" }));
+document.getElementById("email-sender").addEventListener("change", (event) => {
+  globalSettings.completionEmailSender = event.target.value;
+  send({ event: "setGlobalSettings", context, payload: globalSettings });
+});
+document.getElementById("email-recipient").addEventListener("change", (event) => {
+  globalSettings.completionEmailRecipient = event.target.value;
+  send({ event: "setGlobalSettings", context, payload: globalSettings });
+});
+document.getElementById("email-enabled").addEventListener("change", (event) => {
+  globalSettings.completionEmailEnabled = event.target.checked;
+  send({ event: "setGlobalSettings", context, payload: globalSettings });
+});
+document.getElementById("validate-email").addEventListener("click", () => sendToPlugin({ op: "validateEmail" }));

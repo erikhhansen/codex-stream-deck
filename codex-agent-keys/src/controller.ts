@@ -3,20 +3,27 @@ import type { JsonObject } from "@elgato/utils";
 
 import { approvalResponse, parseApprovalRequest, type ApprovalChoice, type PendingApproval, type RpcId } from "./approval.js";
 import { CodexClient } from "./codex-client.js";
-import { readSessionActivity } from "./session-activity.js";
+import { readConfiguredAgents } from "./configured-agents.js";
+import { didFinishWork, readSessionActivity } from "./session-activity.js";
 import { normalizeThreadId, requireThreadId } from "./selection.js";
 import { statusFor } from "./status.js";
-import type { CodexThread, ConnectionState, GlobalSettings, LocalActivity, RateLimitSnapshot, StatusView, ThreadStatus } from "./types.js";
+import type { CodexThread, CompletionEmailStats, ConnectionState, GlobalSettings, LocalActivity, RateLimitSnapshot, StatusView, ThreadStatus } from "./types.js";
+import { usageView } from "./usage.js";
 
 const DEFAULT_CODEX_PATH = process.platform === "darwin" ? "/Applications/Codex.app/Contents/Resources/codex" : "codex";
 
 class AgentKeysController {
   readonly #client = new CodexClient();
   readonly #listeners = new Set<() => void>();
+  readonly #completionListeners = new Set<(threadId: string) => void>();
   readonly #completedUntil = new Map<string, number>();
   readonly #watchedThreads = new Set<string>();
   readonly #localActivity = new Map<string, LocalActivity>();
   readonly #pendingApprovals = new Map<string, PendingApproval[]>();
+  readonly #serviceTiers = new Map<string, string | null>();
+  readonly #models = new Map<string, string>();
+  readonly #efforts = new Map<string, string | null>();
+  readonly #configuredAgentNames = new Map<string, string>();
   #threads: CodexThread[] = [];
   #connection: ConnectionState = "starting";
   #lastError = "";
@@ -69,6 +76,10 @@ class AgentKeysController {
     const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
     this.#codexPath = this.#normalizePath(settings.codexPath);
     this.#activeThreadId = normalizeThreadId(settings.activeThreadId);
+    for (const agent of await readConfiguredAgents().catch(() => [])) {
+      this.#configuredAgentNames.set(agent.threadId, agent.name);
+      this.#watchedThreads.add(agent.threadId);
+    }
     streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((event) => {
       const next = this.#normalizePath(event.settings.codexPath);
       const nextActiveThreadId = normalizeThreadId(event.settings.activeThreadId);
@@ -92,6 +103,10 @@ class AgentKeysController {
     this.#listeners.add(listener);
   }
 
+  onTurnCompleted(listener: (threadId: string) => void): void {
+    this.#completionListeners.add(listener);
+  }
+
   thread(threadId: string | undefined): CodexThread | undefined {
     return threadId ? this.#threads.find((thread) => thread.id === threadId) : undefined;
   }
@@ -102,12 +117,88 @@ class AgentKeysController {
     void this.#refreshLocalActivity();
   }
 
+  configuredAgentName(threadId: string): string | undefined {
+    return this.#configuredAgentNames.get(threadId);
+  }
+
+  async completionEmailStats(threadId: string): Promise<CompletionEmailStats> {
+    try {
+      await this.refreshServiceTier(threadId);
+    } catch {
+      // A completion email is still useful when runtime settings cannot be refreshed.
+    }
+    const thread = this.thread(threadId);
+    const project = thread?.cwd?.split(/[\\/]/).filter(Boolean).at(-1);
+    const effort = this.#efforts.get(threadId);
+    const serviceTier = this.#serviceTiers.get(threadId);
+    const remaining = usageView(this.#rateLimits).remaining;
+    return {
+      project,
+      model: this.#models.get(threadId),
+      effort: effort ? effort.toUpperCase() : effort === null ? "AUTO" : undefined,
+      speed: serviceTier === undefined ? undefined : serviceTier === "priority" ? "Fast" : "Standard",
+      usageRemaining: remaining ?? undefined,
+      completedAt: new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short"
+      }).format(new Date())
+    };
+  }
+
   isActiveThread(threadId: string | undefined): boolean {
     return !!threadId && threadId === this.#activeThreadId;
   }
 
   isWaitingForApproval(threadId: string): boolean {
     return (this.#pendingApprovals.get(threadId)?.length ?? 0) > 0;
+  }
+
+  serviceTier(threadId: string | undefined): string | null | undefined {
+    return threadId ? this.#serviceTiers.get(threadId) : undefined;
+  }
+
+  async refreshServiceTier(threadId: string): Promise<string | null> {
+    const selected = requireThreadId(threadId);
+    if (!this.#client.connected) await this.reconnect();
+    if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
+    const settings = await this.#client.readThreadRuntimeSettings(selected);
+    this.#serviceTiers.set(selected, settings.serviceTier);
+    this.#models.set(selected, settings.model);
+    this.#efforts.set(selected, settings.reasoningEffort);
+    this.#emit();
+    return settings.serviceTier;
+  }
+
+  model(threadId: string | undefined): string | undefined {
+    return threadId ? this.#models.get(threadId) : undefined;
+  }
+
+  async refreshModel(threadId: string): Promise<string> {
+    const selected = requireThreadId(threadId);
+    if (!this.#client.connected) await this.reconnect();
+    if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
+    const settings = await this.#client.readThreadRuntimeSettings(selected);
+    this.#serviceTiers.set(selected, settings.serviceTier);
+    this.#models.set(selected, settings.model);
+    this.#efforts.set(selected, settings.reasoningEffort);
+    this.#emit();
+    return settings.model;
+  }
+
+  effort(threadId: string | undefined): string | null | undefined {
+    return threadId ? this.#efforts.get(threadId) : undefined;
+  }
+
+  async refreshEffort(threadId: string): Promise<string | null> {
+    const selected = requireThreadId(threadId);
+    if (!this.#client.connected) await this.reconnect();
+    if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
+    const settings = await this.#client.readThreadRuntimeSettings(selected);
+    this.#serviceTiers.set(selected, settings.serviceTier);
+    this.#models.set(selected, settings.model);
+    this.#efforts.set(selected, settings.reasoningEffort);
+    this.#emit();
+    return settings.reasoningEffort;
   }
 
   respondToApproval(threadId: string, choice: ApprovalChoice): void {
@@ -141,7 +232,13 @@ class AgentKeysController {
 
   state(threadId: string | undefined): StatusView {
     const completed = !!threadId && (this.#completedUntil.get(threadId) ?? 0) > Date.now();
-    return statusFor(this.thread(threadId), this.#connection, completed, threadId ? this.#localActivity.get(threadId) : undefined);
+    return statusFor(
+      this.thread(threadId),
+      this.#connection,
+      completed,
+      threadId ? this.#localActivity.get(threadId) : undefined,
+      !!threadId && this.isWaitingForApproval(threadId)
+    );
   }
 
   reconnect(): Promise<void> {
@@ -215,6 +312,7 @@ class AgentKeysController {
     const threadId = typeof params.threadId === "string" ? params.threadId : "";
     if (method === "turn/completed" && threadId) {
       this.#completedUntil.set(threadId, Date.now() + 15_000);
+      for (const listener of this.#completionListeners) listener(threadId);
       setTimeout(() => this.#emit(), 15_100);
     }
     if (method === "thread/status/changed" && threadId && params.status && typeof params.status === "object") {
@@ -223,6 +321,17 @@ class AgentKeysController {
     }
     if (method === "turn/started" && threadId) this.#completedUntil.delete(threadId);
     if (method === "serverRequest/resolved") this.#removePendingApproval(params.requestId);
+    if (method === "thread/settings/updated" && threadId) {
+      const settings = params.threadSettings;
+      if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+        const tier = (settings as Record<string, unknown>).serviceTier;
+        if (typeof tier === "string" || tier === null) this.#serviceTiers.set(threadId, tier);
+        const model = (settings as Record<string, unknown>).model;
+        if (typeof model === "string" && model) this.#models.set(threadId, model);
+        const effort = (settings as Record<string, unknown>).effort;
+        if (typeof effort === "string" || effort === null) this.#efforts.set(threadId, effort);
+      }
+    }
     if (method === "account/rateLimits/updated") void this.#refreshUsageSilently();
     if (["turn/completed", "thread/closed"].includes(method) && threadId) this.#pendingApprovals.delete(threadId);
     this.#emit();
@@ -261,7 +370,15 @@ class AgentKeysController {
 
   #schedulePoll(): void {
     if (this.#pollTimer) clearTimeout(this.#pollTimer);
-    this.#pollTimer = setTimeout(() => void this.refresh().finally(() => this.#schedulePoll()), 5_000);
+    this.#pollTimer = setTimeout(() => {
+      void this.refresh()
+        .catch((error: unknown) => {
+          this.#connection = "error";
+          this.#lastError = error instanceof Error ? error.message : "Could not refresh Codex sessions";
+          this.#emit();
+        })
+        .finally(() => this.#schedulePoll());
+    }, 5_000);
   }
 
   async #refreshLocalActivity(): Promise<void> {
@@ -273,8 +390,12 @@ class AgentKeysController {
         const sessionPath = this.thread(threadId)?.path;
         if (!sessionPath) return;
         const next = await readSessionActivity(sessionPath).catch(() => undefined);
-        if (!next || this.#localActivity.get(threadId) === next) return;
+        const previous = this.#localActivity.get(threadId);
+        if (!next || previous === next) return;
         this.#localActivity.set(threadId, next);
+        if (didFinishWork(previous, next)) {
+          for (const listener of this.#completionListeners) listener(threadId);
+        }
         changed = true;
       }));
     } finally {

@@ -24,6 +24,14 @@
         <label>Codex executable<input id="codex-path" type="text" /></label>
         <button id="test">Test connection</button>
       </section>
+      <section>
+        <h2>Email notifications</h2>
+        <label>Verified sender<input id="email-sender" type="email" /></label>
+        <label>Recipient<input id="email-recipient" type="email" /></label>
+        <label><input id="email-enabled" type="checkbox" /> Email when configured agents finish</label>
+        <p class="hint">Each completion is emailed immediately with session stats. The SendGrid key remains in macOS Keychain.</p>
+        <button id="validate-email">Validate SendGrid setup</button>
+      </section>
       <output id="result" aria-live="polite"></output>
     </main>
     <script src="property-inspector.js"></script>
