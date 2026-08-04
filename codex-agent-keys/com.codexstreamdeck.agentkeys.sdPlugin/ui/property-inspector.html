@@ -12,7 +12,12 @@
       <section class="connection"><span id="dot"></span><strong id="connection">Starting</strong><p id="error"></p></section>
       <section>
         <h2>This key</h2>
-        <label>Codex session<select id="session"><option value="">Choose a session…</option></select></label>
+        <label>Codex session
+          <span class="session-picker" id="session-picker">
+            <button id="session-button" type="button" aria-haspopup="listbox" aria-expanded="false">Choose a session…</button>
+            <span id="session-menu" class="session-menu" role="listbox" hidden></span>
+          </span>
+        </label>
         <label>Key name<input id="display-name" type="text" maxlength="20" placeholder="Uses the session name" /></label>
         <p class="hint">Tap the key to select and open this exact Codex session.</p>
         <p class="hint" id="active-target">No active target</p>

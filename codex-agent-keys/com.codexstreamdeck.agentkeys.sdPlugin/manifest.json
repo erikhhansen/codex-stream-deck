@@ -18,7 +18,7 @@
           "ShowTitle": true,
           "TitleAlignment": "middle",
           "TitleColor": "#17202B",
-          "FontSize": 18,
+          "FontSize": 20,
           "FontStyle": "Bold"
         }
       ]
@@ -149,6 +149,31 @@
       ]
     },
     {
+      "Name": "Capture to Codex",
+      "UUID": "com.codexstreamdeck.agentkeys.capture",
+      "Icon": "imgs/capture",
+      "Tooltip": "Capture a screen region and attach it to the current Codex draft without sending.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/capture",
+          "ShowTitle": true,
+          "Title": "CAPTURE",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 9,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
       "Name": "VS Code",
       "UUID": "com.codexstreamdeck.agentkeys.vscode",
       "Icon": "imgs/vscode",
@@ -170,6 +195,66 @@
           "TitleColor": "#17202B",
           "FontSize": 10,
           "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "Do It",
+      "UUID": "com.codexstreamdeck.agentkeys.do-it",
+      "Icon": "imgs/do-it",
+      "Tooltip": "Enter and submit 'do it' in the selected Codex session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/do-it",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Guide Me",
+      "UUID": "com.codexstreamdeck.agentkeys.guide-me",
+      "Icon": "imgs/guide-me",
+      "Tooltip": "Enter and submit 'Guide Me' in the selected Codex session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/guide-me",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Commit, Merge, Deploy",
+      "UUID": "com.codexstreamdeck.agentkeys.commit-merge-deploy",
+      "Icon": "imgs/commit-merge-deploy",
+      "Tooltip": "Enter and submit 'Commit, Merge, Deploy' in the selected Codex session.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/commit-merge-deploy",
+          "ShowTitle": false
         }
       ]
     },
@@ -211,10 +296,20 @@
       "Name": "Speed",
       "UUID": "com.codexstreamdeck.agentkeys.speed",
       "Icon": "imgs/speed",
-      "Tooltip": "Show the active Codex session's Standard or Fast speed.",
+      "Tooltip": "Turn left for Standard, turn right for Fast, or press to toggle the active Codex session's speed.",
       "Controllers": [
-        "Keypad"
+        "Keypad",
+        "Encoder"
       ],
+      "Encoder": {
+        "Icon": "imgs/speed",
+        "StackColor": "#FF4F87",
+        "TriggerDescription": {
+          "Rotate": "Change speed",
+          "Push": "Toggle Standard / Fast",
+          "Touch": "Toggle Standard / Fast"
+        }
+      },
       "SupportedInMultiActions": false,
       "UserTitleEnabled": false,
       "States": [
@@ -228,10 +323,20 @@
       "Name": "Model",
       "UUID": "com.codexstreamdeck.agentkeys.model",
       "Icon": "imgs/model",
-      "Tooltip": "Show the active Codex session's model.",
+      "Tooltip": "Rotate to change the active Codex session's model; press to advance.",
       "Controllers": [
-        "Keypad"
+        "Keypad",
+        "Encoder"
       ],
+      "Encoder": {
+        "Icon": "imgs/model",
+        "StackColor": "#B89AF7",
+        "TriggerDescription": {
+          "Rotate": "Change model",
+          "Push": "Next model",
+          "Touch": "Next model"
+        }
+      },
       "SupportedInMultiActions": false,
       "UserTitleEnabled": false,
       "States": [
@@ -245,10 +350,20 @@
       "Name": "Effort",
       "UUID": "com.codexstreamdeck.agentkeys.effort",
       "Icon": "imgs/effort",
-      "Tooltip": "Show the active Codex session's reasoning-effort level.",
+      "Tooltip": "Rotate through the active model's supported reasoning-effort levels; press to advance.",
       "Controllers": [
-        "Keypad"
+        "Keypad",
+        "Encoder"
       ],
+      "Encoder": {
+        "Icon": "imgs/effort",
+        "StackColor": "#FFF0A8",
+        "TriggerDescription": {
+          "Rotate": "Change effort",
+          "Push": "Next effort",
+          "Touch": "Next effort"
+        }
+      },
       "SupportedInMultiActions": false,
       "UserTitleEnabled": false,
       "States": [

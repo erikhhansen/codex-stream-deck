@@ -11,5 +11,14 @@ h2 { margin: 0 0 11px; font-size: 12px; text-transform: uppercase; letter-spacin
 label { display: block; margin: 10px 0; }
 input, select, button { box-sizing: border-box; width: 100%; min-height: 34px; margin-top: 5px; border: 1px solid #5a5a5a; border-radius: 5px; background: #3b3b3b; color: #fff; padding: 6px 9px; font: inherit; }
 button { width: auto; border-color: #168bd2; background: #0879bd; cursor: pointer; }
+.session-picker { display: block; }
+#session-button { position: relative; width: 100%; padding-right: 30px; border-color: #5a5a5a; background: #3b3b3b; text-align: left; }
+#session-button::after { content: "⌄"; position: absolute; right: 10px; font-size: 17px; line-height: 1; }
+#session-button[aria-expanded="true"] { border-color: #168bd2; }
+.session-menu { display: block; max-height: 220px; margin-top: 4px; overflow-y: auto; border: 1px solid #5a5a5a; border-radius: 5px; background: #252525; }
+.session-menu[hidden] { display: none; }
+.session-option { display: block; width: 100%; min-height: 32px; margin: 0; border: 0; border-bottom: 1px solid #454545; border-radius: 0; background: transparent; text-align: left; }
+.session-option:last-child { border-bottom: 0; }
+.session-option:hover, .session-option:focus, .session-option[aria-selected="true"] { background: #0879bd; outline: none; }
 .hint { color: #c2c2c2; line-height: 1.35; }
 output { display: block; min-height: 20px; margin-top: 12px; color: #9be7be; }

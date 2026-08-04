@@ -135,6 +135,7 @@ export function renderProjectSvg(options: RenderOptions): string {
       <stop offset="1" stop-color="#07090E"/>
     </linearGradient>
   </defs>
+  <rect width="144" height="144" fill="#000000"/>
   <rect width="144" height="144" rx="19" fill="#05070B"/>
   <rect x="3" y="3" width="138" height="138" rx="17" fill="url(#bg)" stroke="${display.color}" stroke-opacity=".34" stroke-width="2"/>
   <rect x="8" y="11" width="96" height="32" rx="16" fill="${display.color}" opacity=".11"/>
@@ -164,6 +165,7 @@ export function renderUtilitySvg(
       <stop offset="1" stop-color="#06080C"/>
     </linearGradient>
   </defs>
+  <rect width="144" height="144" fill="#000000"/>
   <rect width="144" height="144" rx="19" fill="#05070B"/>
   <rect x="3" y="3" width="138" height="138" rx="17" fill="url(#utility-bg)" stroke="${color}" stroke-opacity=".35" stroke-width="2"/>
   <rect x="20" y="15" width="104" height="84" rx="23" fill="${color}" opacity=".08"/>

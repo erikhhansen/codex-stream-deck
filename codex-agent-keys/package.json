@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "icons": "node scripts/generate-plugin-icons.mjs",
+    "icons:streamdock": "node scripts/generate-streamdock-session-images.mjs",
+    "manifest:streamdock": "node scripts/generate-streamdock-manifest.mjs",
     "build": "npm run build:native && rollup --config",
     "build:native": "xcrun swiftc native/codex-command.swift -o com.codexstreamdeck.agentkeys.sdPlugin/bin/codex-command -module-cache-path /private/tmp/codex-agent-keys-swift-cache",
     "dev": "rollup --config --watch",

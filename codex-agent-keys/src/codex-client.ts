@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import type { RpcId } from "./approval.js";
-import type { CodexThread, RateLimitsResponse, ThreadRuntimeSettings } from "./types.js";
+import type { CodexModelOption, CodexThread, RateLimitsResponse, ThreadRuntimeSettings } from "./types.js";
 
 interface Pending {
   resolve: (value: unknown) => void;
@@ -95,14 +95,14 @@ export class CodexClient extends EventEmitter {
     this.#send({ id, error: { code, message } });
   }
 
-  async listThreads(): Promise<CodexThread[]> {
+  async listThreads(archived = false): Promise<CodexThread[]> {
     const response = await this.request<{ data?: CodexThread[] }>("thread/list", {
       limit: 100,
       sortKey: "recency_at",
       sortDirection: "desc",
-      archived: false
+      archived
     }, 30_000);
-    return Array.isArray(response.data) ? response.data : [];
+    return Array.isArray(response.data) ? response.data.map((thread) => ({ ...thread, archived })) : [];
   }
 
   readRateLimits(): Promise<RateLimitsResponse> {
@@ -111,6 +111,31 @@ export class CodexClient extends EventEmitter {
 
   async readThreadServiceTier(threadId: string): Promise<string | null> {
     return (await this.readThreadRuntimeSettings(threadId)).serviceTier;
+  }
+
+  async listModels(): Promise<CodexModelOption[]> {
+    const response = await this.request<{ data?: unknown[] }>("model/list", {
+      limit: 100,
+      includeHidden: false
+    }, 30_000);
+    if (!Array.isArray(response.data)) return [];
+    return response.data.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const model = item as Record<string, unknown>;
+      if (typeof model.model !== "string" || !model.model) return [];
+      const efforts = Array.isArray(model.supportedReasoningEfforts)
+        ? model.supportedReasoningEfforts.flatMap((entry) => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+            const effort = (entry as Record<string, unknown>).reasoningEffort;
+            return typeof effort === "string" && effort ? [effort] : [];
+          })
+        : [];
+      return [{
+        model: model.model,
+        displayName: typeof model.displayName === "string" ? model.displayName : model.model,
+        supportedReasoningEfforts: efforts
+      }];
+    });
   }
 
   async readThreadRuntimeSettings(threadId: string): Promise<ThreadRuntimeSettings> {

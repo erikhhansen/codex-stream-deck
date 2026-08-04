@@ -11,6 +11,10 @@ The **Codex Session** action pins, selects, and opens one exact Codex thread. Gu
 - **Terminal** — show or hide its integrated terminal.
 - **Review** — toggle its review view.
 - **Dictate** — press Codex's real Dictate control in its composer.
+- **Capture to Codex** — capture a screen region and attach it to the current Codex draft without sending.
+- **Do It** — replace the selected session's composer contents with `do it` and submit it.
+- **Guide Me** — replace the selected session's composer contents with `Guide Me` and submit it.
+- **Commit, Merge, Deploy** — replace the selected session's composer contents with `Commit, Merge, Deploy` and submit it.
 - **VS Code** — focus or open the Git repository for the selected task.
 - **Codex Usage** — show the most constrained remaining allowance as a percentage; the footer shows both the rolling 5-hour and weekly windows.
 - **Tokens Today** — total the token increases recorded in local Codex session logs since midnight and show a compact value such as `23.4M`.
@@ -28,7 +32,7 @@ The active target is stored as a stable Codex thread ID in Stream Deck global pl
 
 Dependent actions read this explicit target and remain guarded when it is empty. Approve and Reject are additionally guarded unless the plugin holds an exact, unresolved Codex approval request for that thread. They respond to that request ID through the Codex app-server protocol; they do not simulate Return or Escape. Generic permission-profile and user-input prompts are deliberately excluded because they cannot be safely reduced to yes/no. Selection can be cleared from the Agent key's property inspector; it does not need a dedicated physical key.
 
-On macOS, Terminal, Review, and Dictate navigate to the stored thread and then operate directly on Codex Desktop. VS Code resolves the task's working directory to its Git worktree root, then opens that folder with VS Code's bundled launcher. Dictate presses Codex's native composer control, so it is not vulnerable to Snagit or another app intercepting a keyboard shortcut. Stream Deck must be allowed under **System Settings → Privacy & Security → Accessibility**.
+On macOS, Terminal, Review, Dictate, Do It, Guide Me, and Commit, Merge, Deploy navigate to the stored thread and then operate directly on Codex Desktop. VS Code resolves the task's working directory to its Git worktree root, then opens that folder with VS Code's bundled launcher. Dictate presses Codex's native composer control. The prompt buttons locate the composer beside that control, replace its contents with their respective prompt, and submit it. Capture to Codex invokes the installed menu-bar helper and targets whichever Codex task is currently active; each press adds one image to the draft without pressing Return. Stream Deck must be allowed under **System Settings → Privacy & Security → Accessibility**.
 
 Speed, Model, and Effort are read-only indicators. They show the values reported for the Agent key marked as the active target and deliberately perform no action when pressed.
 

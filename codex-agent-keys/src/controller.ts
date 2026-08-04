@@ -4,16 +4,27 @@ import type { JsonObject } from "@elgato/utils";
 import { approvalResponse, parseApprovalRequest, type ApprovalChoice, type PendingApproval, type RpcId } from "./approval.js";
 import { CodexClient } from "./codex-client.js";
 import { readConfiguredAgents } from "./configured-agents.js";
+import { CodexDesktopIpcClient, type CodexDesktopThreadSettings } from "./desktop-ipc.js";
+import { DesktopSettingsConvergence } from "./desktop-settings-convergence.js";
 import { didFinishWork, readSessionActivity } from "./session-activity.js";
+import { getGlobalSettings, rememberGlobalSettings, setGlobalSettings } from "./global-settings.js";
 import { normalizeThreadId, requireThreadId } from "./selection.js";
 import { statusFor } from "./status.js";
-import type { CodexThread, CompletionEmailStats, ConnectionState, GlobalSettings, LocalActivity, RateLimitSnapshot, StatusView, ThreadStatus } from "./types.js";
+import type { CodexModelOption, CodexThread, CompletionEmailStats, ConnectionState, GlobalSettings, LocalActivity, RateLimitSnapshot, StatusView, ThreadRuntimeSettings, ThreadStatus } from "./types.js";
 import { usageView } from "./usage.js";
 
 const DEFAULT_CODEX_PATH = process.platform === "darwin" ? "/Applications/Codex.app/Contents/Resources/codex" : "codex";
+const RUNTIME_SETTING_KEYS = ["serviceTier", "model", "reasoningEffort"] as const;
 
-class AgentKeysController {
-  readonly #client = new CodexClient();
+export interface DesktopSettingsClient {
+  updateThreadSettings(conversationId: string, threadSettings: CodexDesktopThreadSettings): Promise<void>;
+  close(): void;
+}
+
+export class AgentKeysController {
+  readonly #client: CodexClient;
+  readonly #desktopSettingsClient: DesktopSettingsClient;
+  readonly #desktopSettingsConvergence: DesktopSettingsConvergence;
   readonly #listeners = new Set<() => void>();
   readonly #completionListeners = new Set<(threadId: string) => void>();
   readonly #completedUntil = new Map<string, number>();
@@ -23,6 +34,10 @@ class AgentKeysController {
   readonly #serviceTiers = new Map<string, string | null>();
   readonly #models = new Map<string, string>();
   readonly #efforts = new Map<string, string | null>();
+  readonly #desktopSettingsOverrides = new Map<string, Partial<ThreadRuntimeSettings>>();
+  readonly #runtimeSettingsRefreshes = new Map<string, Promise<ThreadRuntimeSettings>>();
+  #modelCatalog: CodexModelOption[] | undefined;
+  readonly #modelAliases = new Map<string, string>();
   readonly #configuredAgentNames = new Map<string, string>();
   #threads: CodexThread[] = [];
   #connection: ConnectionState = "starting";
@@ -38,8 +53,17 @@ class AgentKeysController {
   #flashOn = true;
   #reconnectPromise: Promise<void> | undefined;
   #readingActivity = false;
+  #stopping = false;
 
-  constructor() {
+  constructor(client = new CodexClient(), desktopSettingsClient: DesktopSettingsClient = new CodexDesktopIpcClient()) {
+    this.#client = client;
+    this.#desktopSettingsClient = desktopSettingsClient;
+    this.#desktopSettingsConvergence = new DesktopSettingsConvergence(desktopSettingsClient, {
+      onRetryError: (threadId, error) => {
+        const message = error instanceof Error ? error.message : "unknown error";
+        streamDeck.logger.warn(`Could not refresh Codex desktop settings after turn completion: thread=${threadId} error=${message}`);
+      }
+    });
     this.#client.on("notification", (method: string, params: Record<string, unknown>) => this.#onNotification(method, params));
     this.#client.on("serverRequest", (id: RpcId, method: string, params: Record<string, unknown>) => {
       this.#onServerRequest(id, method, params);
@@ -73,7 +97,8 @@ class AgentKeysController {
   }
 
   async start(): Promise<void> {
-    const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+    this.#stopping = false;
+    const settings = await getGlobalSettings();
     this.#codexPath = this.#normalizePath(settings.codexPath);
     this.#activeThreadId = normalizeThreadId(settings.activeThreadId);
     for (const agent of await readConfiguredAgents().catch(() => [])) {
@@ -81,15 +106,21 @@ class AgentKeysController {
       this.#watchedThreads.add(agent.threadId);
     }
     streamDeck.settings.onDidReceiveGlobalSettings<GlobalSettings>((event) => {
-      const next = this.#normalizePath(event.settings.codexPath);
-      const nextActiveThreadId = normalizeThreadId(event.settings.activeThreadId);
+      const settings = rememberGlobalSettings(event.settings);
+      const next = this.#normalizePath(settings.codexPath);
+      const nextActiveThreadId = normalizeThreadId(settings.activeThreadId);
       const selectionChanged = nextActiveThreadId !== this.#activeThreadId;
       this.#activeThreadId = nextActiveThreadId;
       if (next !== this.#codexPath) {
         this.#codexPath = next;
         void this.reconnect();
       }
-      if (selectionChanged) this.#emit();
+      if (selectionChanged) {
+        this.#emit();
+        if (nextActiveThreadId && !this.thread(nextActiveThreadId)?.archived) {
+          void this.#refreshRuntimeSettingsSilently(nextActiveThreadId);
+        }
+      }
     });
     this.#flashTimer = setInterval(() => {
       this.#flashOn = !this.#flashOn;
@@ -97,6 +128,19 @@ class AgentKeysController {
     }, 650);
     this.#activityTimer = setInterval(() => void this.#refreshLocalActivity(), 1_000);
     await this.reconnect();
+  }
+
+  async stop(): Promise<void> {
+    this.#stopping = true;
+    if (this.#pollTimer) clearTimeout(this.#pollTimer);
+    if (this.#flashTimer) clearInterval(this.#flashTimer);
+    if (this.#activityTimer) clearInterval(this.#activityTimer);
+    this.#pollTimer = undefined;
+    this.#flashTimer = undefined;
+    this.#activityTimer = undefined;
+    this.#desktopSettingsConvergence.close();
+    this.#desktopSettingsClient.close();
+    await this.#client.stop();
   }
 
   onChange(listener: () => void): void {
@@ -158,15 +202,27 @@ class AgentKeysController {
   }
 
   async refreshServiceTier(threadId: string): Promise<string | null> {
+    return (await this.refreshRuntimeSettings(threadId)).serviceTier;
+  }
+
+  async setServiceTier(threadId: string, serviceTier: string | null): Promise<void> {
     const selected = requireThreadId(threadId);
-    if (!this.#client.connected) await this.reconnect();
-    if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
-    const settings = await this.#client.readThreadRuntimeSettings(selected);
-    this.#serviceTiers.set(selected, settings.serviceTier);
-    this.#models.set(selected, settings.model);
-    this.#efforts.set(selected, settings.reasoningEffort);
-    this.#emit();
-    return settings.serviceTier;
+    if (this.thread(selected)?.archived) throw new Error("The selected Codex session is archived");
+    await this.#desktopSettingsClient.updateThreadSettings(selected, { serviceTier });
+    this.#rememberDesktopSettings(selected, { serviceTier });
+    streamDeck.logger.info(`Codex desktop speed updated: thread=${selected} tier=${serviceTier ?? "standard"}`);
+    if (this.#serviceTiers.get(selected) !== serviceTier) {
+      this.#serviceTiers.set(selected, serviceTier);
+      this.#emit();
+    }
+  }
+
+  async toggleServiceTier(threadId: string): Promise<void> {
+    const selected = requireThreadId(threadId);
+    const current = this.#serviceTiers.has(selected)
+      ? this.#serviceTiers.get(selected)
+      : await this.refreshServiceTier(selected);
+    await this.setServiceTier(selected, current === "priority" ? null : "priority");
   }
 
   model(threadId: string | undefined): string | undefined {
@@ -174,15 +230,32 @@ class AgentKeysController {
   }
 
   async refreshModel(threadId: string): Promise<string> {
+    return (await this.refreshRuntimeSettings(threadId)).model;
+  }
+
+  async cycleModel(threadId: string, steps: number): Promise<void> {
     const selected = requireThreadId(threadId);
-    if (!this.#client.connected) await this.reconnect();
-    if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
-    const settings = await this.#client.readThreadRuntimeSettings(selected);
-    this.#serviceTiers.set(selected, settings.serviceTier);
-    this.#models.set(selected, settings.model);
-    this.#efforts.set(selected, settings.reasoningEffort);
-    this.#emit();
-    return settings.model;
+    if (this.thread(selected)?.archived) throw new Error("The selected Codex session is archived");
+    const settings = this.#models.has(selected) && this.#efforts.has(selected)
+      ? { model: this.#models.get(selected)!, reasoningEffort: this.#efforts.get(selected)! }
+      : await this.refreshRuntimeSettings(selected);
+    const catalog = await this.#modelsCatalog();
+    if (catalog.length === 0) throw new Error("Codex did not report any available models");
+    const currentModel = this.#canonicalModelId(settings.model);
+    const currentIndex = catalog.findIndex((item) => item.model === currentModel);
+    const start = currentIndex >= 0 ? currentIndex : steps >= 0 ? -1 : 0;
+    const next = catalog[this.#wrapIndex(start + steps, catalog.length)]!;
+    const nextEffort = settings.reasoningEffort === null || next.supportedReasoningEfforts.includes(settings.reasoningEffort)
+      ? settings.reasoningEffort
+      : next.supportedReasoningEfforts.at(-1) ?? null;
+    await this.#desktopSettingsClient.updateThreadSettings(selected, { model: next.model, effort: nextEffort });
+    this.#rememberDesktopSettings(selected, { model: next.model, effort: nextEffort });
+    streamDeck.logger.info(`Codex desktop model updated: thread=${selected} model=${next.model} effort=${nextEffort ?? "auto"}`);
+    if (this.#models.get(selected) !== next.model || this.#efforts.get(selected) !== nextEffort) {
+      this.#models.set(selected, next.model);
+      this.#efforts.set(selected, nextEffort);
+      this.#emit();
+    }
   }
 
   effort(threadId: string | undefined): string | null | undefined {
@@ -190,15 +263,62 @@ class AgentKeysController {
   }
 
   async refreshEffort(threadId: string): Promise<string | null> {
+    return (await this.refreshRuntimeSettings(threadId)).reasoningEffort;
+  }
+
+  async cycleEffort(threadId: string, steps: number): Promise<void> {
     const selected = requireThreadId(threadId);
+    if (this.thread(selected)?.archived) throw new Error("The selected Codex session is archived");
+    const settings = this.#models.has(selected) && this.#efforts.has(selected)
+      ? { model: this.#models.get(selected)!, reasoningEffort: this.#efforts.get(selected)! }
+      : await this.refreshRuntimeSettings(selected);
+    const catalog = await this.#modelsCatalog();
+    const model = catalog.find((item) => item.model === this.#canonicalModelId(settings.model));
+    const choices = model?.supportedReasoningEfforts ?? [];
+    if (choices.length === 0) throw new Error(`Codex did not report effort choices for ${settings.model}`);
+    const currentIndex = settings.reasoningEffort === null ? -1 : choices.indexOf(settings.reasoningEffort);
+    const start = currentIndex >= 0 ? currentIndex : steps >= 0 ? -1 : 0;
+    const next = choices[this.#wrapIndex(start + steps, choices.length)]!;
+    await this.#desktopSettingsClient.updateThreadSettings(selected, { effort: next });
+    this.#rememberDesktopSettings(selected, { effort: next });
+    streamDeck.logger.info(`Codex desktop effort updated: thread=${selected} effort=${next}`);
+    if (this.#efforts.get(selected) !== next) {
+      this.#efforts.set(selected, next);
+      this.#emit();
+    }
+  }
+
+  async refreshRuntimeSettings(threadId: string): Promise<ThreadRuntimeSettings> {
+    const selected = requireThreadId(threadId);
+    if (this.thread(selected)?.archived) throw new Error("The selected Codex session is archived");
     if (!this.#client.connected) await this.reconnect();
     if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
-    const settings = await this.#client.readThreadRuntimeSettings(selected);
-    this.#serviceTiers.set(selected, settings.serviceTier);
-    this.#models.set(selected, settings.model);
-    this.#efforts.set(selected, settings.reasoningEffort);
-    this.#emit();
-    return settings.reasoningEffort;
+    const current = this.#runtimeSettingsRefreshes.get(selected);
+    if (current) return current;
+    const refresh = this.#client.readThreadRuntimeSettings(selected).then((reportedSettings) => {
+      const settings = this.#mergeReportedSettings(selected, reportedSettings) as ThreadRuntimeSettings;
+      const changed = this.#serviceTiers.get(selected) !== settings.serviceTier
+        || this.#models.get(selected) !== settings.model
+        || this.#efforts.get(selected) !== settings.reasoningEffort;
+      this.#serviceTiers.set(selected, settings.serviceTier);
+      this.#models.set(selected, settings.model);
+      this.#efforts.set(selected, settings.reasoningEffort);
+      if (changed) this.#emit();
+      return settings;
+    }).finally(() => this.#runtimeSettingsRefreshes.delete(selected));
+    this.#runtimeSettingsRefreshes.set(selected, refresh);
+    return refresh;
+  }
+
+  async recoverApproval(threadId: string): Promise<boolean> {
+    const selected = requireThreadId(threadId);
+    if (this.isWaitingForApproval(selected)) return true;
+    const waiting = this.thread(selected)?.status?.activeFlags?.includes("waitingOnApproval") ?? false;
+    if (!waiting) return false;
+    await this.refreshRuntimeSettings(selected);
+    if (this.isWaitingForApproval(selected)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return this.isWaitingForApproval(selected);
   }
 
   respondToApproval(threadId: string, choice: ApprovalChoice): void {
@@ -216,17 +336,18 @@ class AgentKeysController {
   async selectThread(threadId: string): Promise<void> {
     const selected = requireThreadId(threadId);
     if (selected === this.#activeThreadId) return;
-    const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+    const settings = await getGlobalSettings();
     this.#activeThreadId = selected;
-    await streamDeck.settings.setGlobalSettings({ ...settings, activeThreadId: selected });
+    await setGlobalSettings({ ...settings, activeThreadId: selected });
     this.#emit();
+    if (!this.thread(selected)?.archived) void this.#refreshRuntimeSettingsSilently(selected);
   }
 
   async clearActiveThread(): Promise<void> {
     if (!this.#activeThreadId) return;
-    const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+    const settings = await getGlobalSettings();
     this.#activeThreadId = "";
-    await streamDeck.settings.setGlobalSettings({ ...settings, activeThreadId: "" });
+    await setGlobalSettings({ ...settings, activeThreadId: "" });
     this.#emit();
   }
 
@@ -242,6 +363,7 @@ class AgentKeysController {
   }
 
   reconnect(): Promise<void> {
+    if (this.#stopping) return Promise.resolve();
     if (this.#reconnectPromise) return this.#reconnectPromise;
     this.#reconnectPromise = this.#performReconnect().finally(() => {
       this.#reconnectPromise = undefined;
@@ -268,7 +390,25 @@ class AgentKeysController {
 
   async refresh(): Promise<void> {
     if (!this.#client.connected) return this.reconnect();
-    this.#threads = await this.#client.listThreads();
+    const [activeThreads, archivedThreads] = await Promise.all([
+      this.#client.listThreads(false),
+      this.#client.listThreads(true)
+    ]);
+    const retainedThreadIds = new Set(this.#watchedThreads);
+    if (this.#activeThreadId) retainedThreadIds.add(this.#activeThreadId);
+    const retainedArchivedThreads = archivedThreads.filter((thread) => retainedThreadIds.has(thread.id));
+    this.#threads = [...activeThreads, ...retainedArchivedThreads];
+    for (const thread of retainedArchivedThreads) {
+      this.#serviceTiers.delete(thread.id);
+      this.#models.delete(thread.id);
+      this.#efforts.delete(thread.id);
+      this.#desktopSettingsOverrides.delete(thread.id);
+      this.#desktopSettingsConvergence.clear(thread.id);
+      this.#pendingApprovals.delete(thread.id);
+    }
+    if (this.#activeThreadId && !this.thread(this.#activeThreadId)?.archived) {
+      void this.#refreshRuntimeSettingsSilently(this.#activeThreadId);
+    }
     if (Date.now() - this.#lastUsageRefreshAt >= 60_000) await this.#refreshUsageSilently();
     await this.#refreshLocalActivity();
     this.#connection = "connected";
@@ -289,6 +429,7 @@ class AgentKeysController {
   }
 
   inspectorState(threadId?: string): JsonObject {
+    const selectedSession = this.thread(threadId);
     return {
       type: "state",
       connection: this.#connection,
@@ -296,7 +437,13 @@ class AgentKeysController {
       codexPath: this.#codexPath,
       activeThreadId: this.#activeThreadId,
       selectedThreadId: threadId ?? "",
-      sessions: this.#threads.slice(0, 50).map((thread) => ({
+      selectedSession: selectedSession ? {
+        id: selectedSession.id,
+        name: selectedSession.name || selectedSession.preview || "Untitled session",
+        cwd: selectedSession.cwd || "",
+        archived: selectedSession.archived === true
+      } : undefined,
+      sessions: this.#threads.filter((thread) => !thread.archived).slice(0, 50).map((thread) => ({
         id: thread.id,
         name: thread.name || thread.preview || "Untitled session",
         cwd: thread.cwd || ""
@@ -308,10 +455,44 @@ class AgentKeysController {
     return typeof value === "string" && value.trim() && !value.includes("\0") ? value.trim() : DEFAULT_CODEX_PATH;
   }
 
+  async #modelsCatalog(): Promise<CodexModelOption[]> {
+    if (this.#modelCatalog) return this.#modelCatalog;
+    if (!this.#client.connected) await this.reconnect();
+    if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
+    const options = await this.#client.listModels();
+    const unique = new Map<string, CodexModelOption>();
+    for (const option of options) {
+      const key = option.displayName.trim().toLowerCase();
+      const existing = unique.get(key);
+      if (!existing || this.#isCanonicalModelId(option) && !this.#isCanonicalModelId(existing)) {
+        unique.set(key, option);
+      }
+    }
+    this.#modelAliases.clear();
+    for (const option of options) {
+      const canonical = unique.get(option.displayName.trim().toLowerCase());
+      if (canonical) this.#modelAliases.set(option.model, canonical.model);
+    }
+    return (this.#modelCatalog = [...unique.values()]);
+  }
+
+  #canonicalModelId(model: string): string {
+    return this.#modelAliases.get(model) ?? model;
+  }
+
+  #isCanonicalModelId(option: CodexModelOption): boolean {
+    return option.model.toLowerCase() === option.displayName.trim().toLowerCase();
+  }
+
+  #wrapIndex(index: number, length: number): number {
+    return ((index % length) + length) % length;
+  }
+
   #onNotification(method: string, params: Record<string, unknown>): void {
     const threadId = typeof params.threadId === "string" ? params.threadId : "";
     if (method === "turn/completed" && threadId) {
       this.#completedUntil.set(threadId, Date.now() + 15_000);
+      this.#desktopSettingsConvergence.schedule(threadId);
       for (const listener of this.#completionListeners) listener(threadId);
       setTimeout(() => this.#emit(), 15_100);
     }
@@ -324,18 +505,25 @@ class AgentKeysController {
     if (method === "thread/settings/updated" && threadId) {
       const settings = params.threadSettings;
       if (settings && typeof settings === "object" && !Array.isArray(settings)) {
+        const reported: Partial<ThreadRuntimeSettings> = {};
         const tier = (settings as Record<string, unknown>).serviceTier;
-        if (typeof tier === "string" || tier === null) this.#serviceTiers.set(threadId, tier);
+        if (typeof tier === "string" || tier === null) reported.serviceTier = tier;
         const model = (settings as Record<string, unknown>).model;
-        if (typeof model === "string" && model) this.#models.set(threadId, model);
+        if (typeof model === "string" && model) reported.model = model;
         const effort = (settings as Record<string, unknown>).effort;
-        if (typeof effort === "string" || effort === null) this.#efforts.set(threadId, effort);
+        if (typeof effort === "string" || effort === null) reported.reasoningEffort = effort;
+        const accepted = this.#mergeReportedSettings(threadId, reported);
+        if (Object.hasOwn(accepted, "serviceTier")) this.#serviceTiers.set(threadId, accepted.serviceTier!);
+        if (accepted.model !== undefined) this.#models.set(threadId, accepted.model);
+        if (Object.hasOwn(accepted, "reasoningEffort")) this.#efforts.set(threadId, accepted.reasoningEffort!);
       }
     }
     if (method === "account/rateLimits/updated") void this.#refreshUsageSilently();
     if (["turn/completed", "thread/closed"].includes(method) && threadId) this.#pendingApprovals.delete(threadId);
     this.#emit();
-    if (["turn/completed", "thread/started", "thread/closed"].includes(method)) setTimeout(() => void this.refresh(), 250);
+    if (["turn/completed", "thread/started", "thread/closed", "thread/archived", "thread/unarchived"].includes(method)) {
+      setTimeout(() => void this.refresh(), 250);
+    }
   }
 
   async #refreshUsageSilently(): Promise<void> {
@@ -344,6 +532,14 @@ class AgentKeysController {
     } catch (error) {
       this.#usageError = error instanceof Error ? error.message : "Usage unavailable";
       this.#emit();
+    }
+  }
+
+  async #refreshRuntimeSettingsSilently(threadId: string): Promise<void> {
+    try {
+      await this.refreshRuntimeSettings(threadId);
+    } catch (error) {
+      streamDeck.logger.warn(error instanceof Error ? error.message : "Could not refresh Codex runtime settings");
     }
   }
 
@@ -369,6 +565,7 @@ class AgentKeysController {
   }
 
   #schedulePoll(): void {
+    if (this.#stopping) return;
     if (this.#pollTimer) clearTimeout(this.#pollTimer);
     this.#pollTimer = setTimeout(() => {
       void this.refresh()
@@ -402,6 +599,41 @@ class AgentKeysController {
       this.#readingActivity = false;
     }
     if (changed) this.#emit();
+  }
+
+  #rememberDesktopSettings(threadId: string, patch: CodexDesktopThreadSettings): void {
+    this.#desktopSettingsConvergence.remember(threadId, patch);
+    const next = { ...this.#desktopSettingsOverrides.get(threadId) };
+    if (Object.hasOwn(patch, "serviceTier")) next.serviceTier = patch.serviceTier ?? null;
+    if (patch.model !== undefined) next.model = patch.model;
+    if (Object.hasOwn(patch, "effort")) next.reasoningEffort = patch.effort ?? null;
+    this.#desktopSettingsOverrides.set(threadId, next);
+  }
+
+  #mergeReportedSettings(
+    threadId: string,
+    reported: Partial<ThreadRuntimeSettings>
+  ): Partial<ThreadRuntimeSettings> {
+    const overrides = { ...this.#desktopSettingsOverrides.get(threadId) };
+    const accepted: Partial<ThreadRuntimeSettings> = {};
+    for (const key of RUNTIME_SETTING_KEYS) {
+      if (!Object.hasOwn(reported, key)) continue;
+      const reportedValue = reported[key];
+      if (!Object.hasOwn(overrides, key)) {
+        Object.assign(accepted, { [key]: reportedValue });
+        continue;
+      }
+      const overrideValue = overrides[key];
+      if (Object.is(reportedValue, overrideValue)) {
+        delete overrides[key];
+        Object.assign(accepted, { [key]: reportedValue });
+      } else {
+        Object.assign(accepted, { [key]: overrideValue });
+      }
+    }
+    if (Object.keys(overrides).length === 0) this.#desktopSettingsOverrides.delete(threadId);
+    else this.#desktopSettingsOverrides.set(threadId, overrides);
+    return accepted;
   }
 
   #emit(): void {

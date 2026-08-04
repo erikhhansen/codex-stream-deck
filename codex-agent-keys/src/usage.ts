@@ -26,10 +26,17 @@ export function usageView(snapshot: RateLimitSnapshot | undefined): UsageView {
   return { remaining: limiting, primaryRemaining, secondaryRemaining, color, foreground, detail: `${short} · ${long}` };
 }
 
-export function renderUsageKey(snapshot: RateLimitSnapshot | undefined, _error = ""): string {
+export function renderUsageKey(snapshot: RateLimitSnapshot | undefined, _error = "", compactWidth?: number): string {
   const view = usageView(snapshot);
   const value = view.remaining === null ? "—" : String(view.remaining);
+  if (compactWidth) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${compactWidth} 72">
+  <rect width="${compactWidth}" height="72" fill="#000000"/>
+  <rect width="${compactWidth}" height="72" rx="12" fill="${view.color}"/>
+  <rect x="2" y="2" width="${compactWidth - 4}" height="68" rx="10" fill="none" stroke="${view.foreground}" stroke-opacity=".25" stroke-width="2"/>
+  <text x="${compactWidth / 2}" y="47" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="900" fill="${view.foreground}">${value}<tspan font-size="18">%</tspan></text>
+</svg>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#000000"/>
   <rect width="144" height="144" rx="20" fill="${view.color}"/>
   <rect x="4" y="4" width="136" height="136" rx="17" fill="none" stroke="${view.foreground}" stroke-opacity=".25" stroke-width="2"/>
   <text x="72" y="91" text-anchor="middle" font-family="Arial, sans-serif" font-size="62" font-weight="900" fill="${view.foreground}">${value}<tspan font-size="31">%</tspan></text>

@@ -9,6 +9,7 @@ export interface ThreadStatus {
 
 export interface CodexThread {
   id: string;
+  archived?: boolean;
   name?: string | null;
   preview?: string;
   cwd?: string;
@@ -68,5 +69,11 @@ export interface ThreadRuntimeSettings {
   model: string;
   serviceTier: string | null;
   reasoningEffort: string | null;
+}
+
+export interface CodexModelOption {
+  model: string;
+  displayName: string;
+  supportedReasoningEfforts: string[];
 }
 import type { JsonObject } from "@elgato/utils";

@@ -6,19 +6,22 @@ import streamDeck, {
   type PropertyInspectorDidAppearEvent,
   type SendToPluginEvent,
   SingletonAction,
-  type WillAppearEvent
+  type WillAppearEvent,
+  type WillDisappearEvent
 } from "@elgato/streamdeck";
 import type { JsonValue } from "@elgato/utils";
 
 import { controller } from "./controller.js";
 import { completionEmailNotifier } from "./completion-email.js";
 import { openThread } from "./native.js";
-import { renderKey, svgDataUrl, wrapTitle } from "./renderer.js";
+import { renderKey, wrapTitle } from "./renderer.js";
+import { sessionImageDataUrl } from "./session-image.js";
 import type { KeySettings } from "./types.js";
 
 @action({ UUID: "com.codexstreamdeck.agentkeys.session" })
 export class SessionKeyAction extends SingletonAction<KeySettings> {
   readonly #rendered = new Map<string, { svg: string; title: string }>();
+  readonly #settings = new Map<string, KeySettings>();
   #scheduled = false;
 
   constructor() {
@@ -28,11 +31,25 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
   }
 
   override async onWillAppear(event: WillAppearEvent<KeySettings>): Promise<void> {
-    if (event.action.isKey()) await this.#render(event.action, event.payload.settings);
+    if (event.action.isKey()) {
+      // Stream Dock restores the manifest image whenever a scene reappears,
+      // even when the action context and rendered SVG are unchanged.
+      this.#rendered.delete(event.action.id);
+      this.#settings.set(event.action.id, event.payload.settings);
+      await this.#render(event.action, event.payload.settings);
+    }
   }
 
   override async onDidReceiveSettings(event: DidReceiveSettingsEvent<KeySettings>): Promise<void> {
-    if (event.action.isKey()) await this.#render(event.action, event.payload.settings);
+    if (event.action.isKey()) {
+      this.#settings.set(event.action.id, event.payload.settings);
+      await this.#render(event.action, event.payload.settings);
+    }
+  }
+
+  override onWillDisappear(event: WillDisappearEvent<KeySettings>): void {
+    this.#settings.delete(event.action.id);
+    this.#rendered.delete(event.action.id);
   }
 
   override async onKeyDown(event: KeyDownEvent<KeySettings>): Promise<void> {
@@ -49,7 +66,7 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
   }
 
   override async onPropertyInspectorDidAppear(event: PropertyInspectorDidAppearEvent<KeySettings>): Promise<void> {
-    const settings = await event.action.getSettings<KeySettings>();
+    const settings = this.#settings.get(event.action.id) ?? {};
     await streamDeck.ui.sendToPropertyInspector(controller.inspectorState(settings.threadId));
   }
 
@@ -70,7 +87,7 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
         });
         return;
       }
-      const settings = await event.action.getSettings<KeySettings>();
+      const settings = this.#settings.get(event.action.id) ?? {};
       await streamDeck.ui.sendToPropertyInspector(controller.inspectorState(settings.threadId));
     } catch (error) {
       await streamDeck.ui.sendToPropertyInspector({
@@ -93,7 +110,8 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
   async #renderAll(): Promise<void> {
     await Promise.all([...this.actions].filter((item) => item.isKey()).map(async (item) => {
       const key = item as KeyAction<KeySettings>;
-      await this.#render(key, await key.getSettings<KeySettings>());
+      const settings = this.#settings.get(key.id);
+      if (settings) await this.#render(key, settings);
     }));
   }
 
@@ -106,7 +124,8 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
     for (const item of this.actions) {
       if (!item.isKey()) continue;
       const key = item as KeyAction<KeySettings>;
-      const settings = await key.getSettings<KeySettings>();
+      const settings = this.#settings.get(key.id);
+      if (!settings) continue;
       if (settings.threadId?.trim() !== threadId) continue;
       const thread = controller.thread(threadId);
       const name = settings.displayName?.trim() || thread?.name || thread?.preview || "Codex agent";
@@ -120,13 +139,12 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
     const thread = controller.thread(settings.threadId);
     const name = settings.displayName?.trim() || thread?.name || thread?.preview || "SESSION";
     const title = wrapTitle(name);
-    const svg = renderKey(
-      controller.state(settings.threadId),
-      controller.flashOn,
-      controller.isActiveThread(settings.threadId)
-    );
+    const state = controller.state(settings.threadId);
+    const flashOn = controller.flashOn;
+    const selected = controller.isActiveThread(settings.threadId);
+    const svg = renderKey(state, flashOn, selected);
     const previous = this.#rendered.get(key.id);
-    if (previous?.svg !== svg) await key.setImage(svgDataUrl(svg));
+    if (previous?.svg !== svg) await key.setImage(sessionImageDataUrl(svg, state, flashOn, selected));
     if (previous?.title !== title) await key.setTitle(title);
     this.#rendered.set(key.id, { svg, title });
   }

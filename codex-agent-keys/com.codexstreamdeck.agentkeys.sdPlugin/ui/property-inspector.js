@@ -4,6 +4,7 @@ let context;
 let actionUuid;
 let actionSettings = {};
 let globalSettings = {};
+let sessionOptions = [];
 
 window.connectElgatoStreamDeckSocket = function (port, propertyInspectorUuid, registerEvent, _info, rawActionInfo) {
   context = propertyInspectorUuid;
@@ -44,6 +45,55 @@ function updateActiveTarget(threadId) {
   active.textContent = threadId ? `Active target: ${threadId}` : "No active target";
 }
 
+function sessionLabel(session) {
+  if (!session) return "Choose a session…";
+  const folder = session.cwd ? ` — ${session.cwd.split(/[\\/]/).pop()}` : "";
+  const archived = session.archived ? " — ARCHIVED" : "";
+  return `${session.name}${folder}${archived}`;
+}
+
+function closeSessionMenu() {
+  document.getElementById("session-menu").hidden = true;
+  document.getElementById("session-button").setAttribute("aria-expanded", "false");
+}
+
+function chooseSession(threadId) {
+  actionSettings.threadId = threadId;
+  send({ event: "setSettings", context, payload: actionSettings });
+  const selected = sessionOptions.find((session) => session.id === threadId);
+  document.getElementById("session-button").textContent = selected ? sessionLabel(selected) : "Choose a session…";
+  for (const option of document.querySelectorAll(".session-option")) {
+    option.setAttribute("aria-selected", option.dataset.threadId === threadId ? "true" : "false");
+  }
+  closeSessionMenu();
+}
+
+function renderSessionPicker(payload) {
+  const selectedId = actionSettings.threadId || payload.selectedThreadId || "";
+  sessionOptions = Array.isArray(payload.sessions) ? [...payload.sessions] : [];
+  if (payload.selectedSession && !sessionOptions.some((session) => session.id === payload.selectedSession.id)) {
+    sessionOptions.unshift(payload.selectedSession);
+  }
+  const selected = sessionOptions.find((session) => session.id === selectedId);
+  document.getElementById("session-button").textContent = selected
+    ? sessionLabel(selected)
+    : selectedId ? "Unavailable session" : "Choose a session…";
+  const menu = document.getElementById("session-menu");
+  menu.replaceChildren();
+  const choices = [{ id: "", name: "Choose a session…", cwd: "" }, ...sessionOptions];
+  for (const session of choices) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "session-option";
+    option.dataset.threadId = session.id;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", session.id === selectedId ? "true" : "false");
+    option.textContent = sessionLabel(session);
+    option.addEventListener("click", () => chooseSession(session.id));
+    menu.append(option);
+  }
+}
+
 function receive(payload) {
   if (payload.type === "result") {
     const result = document.getElementById("result");
@@ -56,19 +106,17 @@ function receive(payload) {
   document.getElementById("error").textContent = payload.lastError || "";
   updateActiveTarget(payload.activeThreadId || "");
   if (!document.getElementById("codex-path").value) document.getElementById("codex-path").value = payload.codexPath || "";
-  const select = document.getElementById("session");
-  const selected = actionSettings.threadId || payload.selectedThreadId || "";
-  select.replaceChildren(new Option("Choose a session…", ""));
-  for (const session of payload.sessions || []) {
-    const folder = session.cwd ? ` — ${session.cwd.split(/[\\/]/).pop()}` : "";
-    select.add(new Option(`${session.name}${folder}`, session.id));
-  }
-  select.value = selected;
+  renderSessionPicker(payload);
 }
 
-document.getElementById("session").addEventListener("change", (event) => {
-  actionSettings.threadId = event.target.value;
-  send({ event: "setSettings", context, payload: actionSettings });
+document.getElementById("session-button").addEventListener("click", () => {
+  const menu = document.getElementById("session-menu");
+  menu.hidden = !menu.hidden;
+  document.getElementById("session-button").setAttribute("aria-expanded", menu.hidden ? "false" : "true");
+});
+
+document.addEventListener("click", (event) => {
+  if (!document.getElementById("session-picker").contains(event.target)) closeSessionMenu();
 });
 
 document.getElementById("display-name").addEventListener("input", (event) => {

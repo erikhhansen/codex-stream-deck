@@ -1,7 +1,7 @@
 /**
  * Shared six-step scale for session setting indicators.
  *
- * Speed and model use the endpoints; effort uses every step.
+ * Speed uses the endpoints; model and effort use the full scale.
  */
 export const SETTING_LEVEL_COLORS = [
   "#DDE7F2",

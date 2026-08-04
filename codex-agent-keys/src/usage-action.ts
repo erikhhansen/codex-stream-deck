@@ -3,12 +3,14 @@ import streamDeck, {
   type KeyAction,
   type KeyDownEvent,
   SingletonAction,
-  type WillAppearEvent
+  type WillAppearEvent,
+  type WillDisappearEvent
 } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { controller } from "./controller.js";
-import { svgDataUrl } from "./renderer.js";
+import { hostImageDataUrl } from "./host-image.js";
+import { rememberTouchbarWidth, touchbarWidth } from "./touchbar.js";
 import { renderUsageKey } from "./usage.js";
 
 @action({ UUID: "com.codexstreamdeck.agentkeys.usage" })
@@ -23,8 +25,14 @@ export class UsageAction extends SingletonAction<JsonObject> {
 
   override async onWillAppear(event: WillAppearEvent<JsonObject>): Promise<void> {
     if (!event.action.isKey()) return;
+    this.#rendered.delete(event.action.id);
+    rememberTouchbarWidth(event.action, event.payload.settings);
     await this.#render(event.action);
     void controller.refreshUsage().catch(() => undefined);
+  }
+
+  override onWillDisappear(event: WillDisappearEvent<JsonObject>): void {
+    this.#rendered.delete(event.action.id);
   }
 
   override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
@@ -47,9 +55,9 @@ export class UsageAction extends SingletonAction<JsonObject> {
   }
 
   async #render(key: KeyAction<JsonObject>): Promise<void> {
-    const svg = renderUsageKey(controller.rateLimits, controller.usageError);
+    const svg = renderUsageKey(controller.rateLimits, controller.usageError, touchbarWidth(key));
     if (this.#rendered.get(key.id) === svg) return;
-    await key.setImage(svgDataUrl(svg));
+    await key.setImage(await hostImageDataUrl(svg));
     this.#rendered.set(key.id, svg);
   }
 }
