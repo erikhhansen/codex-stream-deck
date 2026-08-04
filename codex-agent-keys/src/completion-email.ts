@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 
 import streamDeck from "@elgato/streamdeck";
 
+import { getGlobalSettings } from "./global-settings.js";
 import type { CompletionEmailStats, GlobalSettings } from "./types.js";
 
 const execFileAsync = promisify(execFile);
@@ -88,7 +89,7 @@ export class CompletionEmailNotifier {
   }
 
   async validate(): Promise<number> {
-    const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+    const settings = await getGlobalSettings();
     return postEmail(settings, "Example agent", {
       project: "example-project",
       model: "gpt-5.6-sol",
@@ -100,7 +101,7 @@ export class CompletionEmailNotifier {
   }
 
   async #send(name: string, readStats: () => Promise<CompletionEmailStats>): Promise<void> {
-    const settings = await streamDeck.settings.getGlobalSettings<GlobalSettings>();
+    const settings = await getGlobalSettings();
     if (settings.completionEmailEnabled !== true) return;
     try {
       await postEmail(settings, name, await readStats(), false);

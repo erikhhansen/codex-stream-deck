@@ -8,7 +8,7 @@ export function speedState(threadId: string, serviceTier: string | null | undefi
   return serviceTier === "priority" ? "fast" : "standard";
 }
 
-export function renderSpeedKey(state: SpeedState): string {
+export function renderSpeedKey(state: SpeedState, compactWidth?: number): string {
   const fast = state === "fast";
   const disabled = state === "disabled";
   const fill = fast
@@ -19,12 +19,22 @@ export function renderSpeedKey(state: SpeedState): string {
         ? SETTING_DISABLED_COLOR
         : SETTING_UNAVAILABLE_COLOR;
   const foreground = disabled ? "#7C8795" : "#17202B";
+  if (compactWidth) {
+    const label = fast ? "FAST" : state === "standard" ? "STD" : disabled ? "—" : "…";
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${compactWidth} 72">
+  <rect width="${compactWidth}" height="72" fill="#000000"/>
+  <rect width="${compactWidth}" height="72" rx="12" fill="${fill}"/>
+  <rect x="2" y="2" width="${compactWidth - 4}" height="68" rx="10" fill="none" stroke="${foreground}" stroke-opacity=".25" stroke-width="2"/>
+  <text x="${compactWidth / 2}" y="45" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="${foreground}">${label}</text>
+</svg>`;
+  }
   const content = fast
     ? `<path d="M83 20 42 77h26l-8 47 43-62H76z" fill="none" stroke="${foreground}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`
     : state === "loading"
       ? `<circle cx="72" cy="72" r="25" fill="none" stroke="${foreground}" stroke-width="7" stroke-dasharray="20 12"/>`
       : `<text x="72" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="900" fill="${foreground}">${disabled ? "—" : "STD"}</text>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#000000"/>
   <rect width="144" height="144" rx="20" fill="${fill}"/>
   <rect x="4" y="4" width="136" height="136" rx="17" fill="none" stroke="${foreground}" stroke-opacity=".25" stroke-width="2"/>
   ${content}

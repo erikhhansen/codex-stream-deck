@@ -6,9 +6,13 @@ import { createInterface } from "node:readline";
 
 interface TokenPoint {
   at: number;
-  tokens: number;
+  cumulativeTokens: number;
   key: string;
 }
+
+// Codex's activity dashboard normalizes cached input at one eighth of an
+// uncached token. Use the same weighting so this counter matches the app.
+const CACHED_INPUT_WEIGHT = 1 / 8;
 
 function tokenPoint(line: string): TokenPoint | undefined {
   try {
@@ -17,11 +21,8 @@ function tokenPoint(line: string): TokenPoint | undefined {
       payload?: {
         type?: unknown;
         info?: {
-          last_token_usage?: {
-            input_tokens?: unknown;
+          total_token_usage?: {
             cached_input_tokens?: unknown;
-            output_tokens?: unknown;
-            reasoning_output_tokens?: unknown;
             total_tokens?: unknown;
           } | null;
         } | null;
@@ -29,30 +30,44 @@ function tokenPoint(line: string): TokenPoint | undefined {
     };
     if (event.payload?.type !== "token_count" || typeof event.timestamp !== "string") return undefined;
     const at = Date.parse(event.timestamp);
-    const usage = event.payload.info?.last_token_usage;
-    const tokens = usage?.total_tokens;
-    if (!Number.isFinite(at) || typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return undefined;
-    const key = `${event.timestamp}|${usage?.input_tokens ?? ""}|${usage?.cached_input_tokens ?? ""}|${usage?.output_tokens ?? ""}|${usage?.reasoning_output_tokens ?? ""}|${tokens}`;
-    return { at, tokens, key };
+    const usage = event.payload.info?.total_token_usage;
+    const totalTokens = usage?.total_tokens;
+    const cachedInputTokens = usage?.cached_input_tokens ?? 0;
+    if (!Number.isFinite(at)
+      || typeof totalTokens !== "number"
+      || !Number.isFinite(totalTokens)
+      || totalTokens < 0
+      || typeof cachedInputTokens !== "number"
+      || !Number.isFinite(cachedInputTokens)
+      || cachedInputTokens < 0) return undefined;
+    const cumulativeTokens = totalTokens - cachedInputTokens * (1 - CACHED_INPUT_WEIGHT);
+    const key = `${event.timestamp}|${totalTokens}|${cachedInputTokens}`;
+    return { at, cumulativeTokens, key };
   } catch {
     return undefined;
   }
 }
 
-function accumulate(seen: Set<string>, point: TokenPoint, start: number, end: number): number {
+function accumulate(seen: Set<string>, point: TokenPoint, delta: number, start: number, end: number): number {
   if (point.at < start || point.at >= end || seen.has(point.key)) return 0;
   seen.add(point.key);
-  return point.tokens;
+  return delta;
 }
 
 export function tokensFromJsonl(text: string, start: number, end: number): number {
   const seen = new Set<string>();
   let total = 0;
+  let previous: number | undefined;
   for (const line of text.split(/\r?\n/)) {
     const point = tokenPoint(line);
-    if (point) total += accumulate(seen, point, start, end);
+    if (!point) continue;
+    const delta = previous === undefined || point.cumulativeTokens < previous
+      ? point.cumulativeTokens
+      : point.cumulativeTokens - previous;
+    previous = point.cumulativeTokens;
+    total += accumulate(seen, point, delta, start, end);
   }
-  return total;
+  return Math.round(total);
 }
 
 async function candidateFiles(root: string, start: number): Promise<string[]> {
@@ -73,10 +88,16 @@ async function candidateFiles(root: string, start: number): Promise<string[]> {
 
 async function tokensFromFile(filePath: string, start: number, end: number, seen: Set<string>): Promise<number> {
   let total = 0;
+  let previous: number | undefined;
   const lines = createInterface({ input: createReadStream(filePath, { encoding: "utf8" }), crlfDelay: Infinity });
   for await (const line of lines) {
     const point = tokenPoint(line);
-    if (point) total += accumulate(seen, point, start, end);
+    if (!point) continue;
+    const delta = previous === undefined || point.cumulativeTokens < previous
+      ? point.cumulativeTokens
+      : point.cumulativeTokens - previous;
+    previous = point.cumulativeTokens;
+    total += accumulate(seen, point, delta, start, end);
   }
   return total;
 }
@@ -95,7 +116,7 @@ export async function readTokensToday(now = new Date()): Promise<number> {
   const seen = new Set<string>();
   let total = 0;
   for (const filePath of files) total += await tokensFromFile(filePath, start, end, seen);
-  return total;
+  return Math.round(total);
 }
 
 export function compactTokens(total: number): string {
@@ -107,10 +128,17 @@ export function compactTokens(total: number): string {
   return format(safe / 1_000_000_000, "B");
 }
 
-export function renderTokensKey(total: number | undefined): string {
+export function renderTokensKey(total: number | undefined, compactWidth?: number): string {
   const value = total === undefined ? "—" : compactTokens(total);
   const fontSize = value.length >= 5 ? 45 : 56;
+  if (compactWidth) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${compactWidth} 72">
+  <rect width="${compactWidth}" height="72" fill="#000000"/>
+  <rect width="${compactWidth}" height="72" rx="12" fill="#8BB7FF"/>
+  <rect x="2" y="2" width="${compactWidth - 4}" height="68" rx="10" fill="none" stroke="#17202B" stroke-opacity=".25" stroke-width="2"/>
+  <text x="${compactWidth / 2}" y="45" text-anchor="middle" font-family="Arial, sans-serif" font-size="${value.length >= 5 ? 27 : 32}" font-weight="900" fill="#17202B">${value}</text>
+</svg>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#000000"/>
   <rect width="144" height="144" rx="20" fill="#8BB7FF"/>
   <rect x="4" y="4" width="136" height="136" rx="17" fill="none" stroke="#17202B" stroke-opacity=".25" stroke-width="2"/>
   <text x="72" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="900" fill="#17202B">${value}</text>

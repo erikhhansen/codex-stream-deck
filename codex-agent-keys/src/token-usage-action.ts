@@ -3,11 +3,13 @@ import streamDeck, {
   type KeyAction,
   type KeyDownEvent,
   SingletonAction,
-  type WillAppearEvent
+  type WillAppearEvent,
+  type WillDisappearEvent
 } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
-import { svgDataUrl } from "./renderer.js";
+import { hostImageDataUrl } from "./host-image.js";
+import { rememberTouchbarWidth, touchbarWidth } from "./touchbar.js";
 import { readTokensToday, renderTokensKey } from "./token-usage.js";
 
 @action({ UUID: "com.codexstreamdeck.agentkeys.tokens-today" })
@@ -25,8 +27,14 @@ export class TokensTodayAction extends SingletonAction<JsonObject> {
 
   override async onWillAppear(event: WillAppearEvent<JsonObject>): Promise<void> {
     if (!event.action.isKey()) return;
+    this.#rendered.delete(event.action.id);
+    rememberTouchbarWidth(event.action, event.payload.settings);
     await this.#render(event.action);
     void this.#refresh();
+  }
+
+  override onWillDisappear(event: WillDisappearEvent<JsonObject>): void {
+    this.#rendered.delete(event.action.id);
   }
 
   override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
@@ -51,9 +59,9 @@ export class TokensTodayAction extends SingletonAction<JsonObject> {
   }
 
   async #render(key: KeyAction<JsonObject>): Promise<void> {
-    const svg = renderTokensKey(this.#total);
+    const svg = renderTokensKey(this.#total, touchbarWidth(key));
     if (this.#rendered.get(key.id) === svg) return;
-    await key.setImage(svgDataUrl(svg));
+    await key.setImage(await hostImageDataUrl(svg));
     this.#rendered.set(key.id, svg);
   }
 }

@@ -1,6 +1,7 @@
 import streamDeck, { action, type KeyDownEvent, SingletonAction } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
+import { requestCodexCapture } from "./capture-helper.js";
 import { controller } from "./controller.js";
 import { runSelectedDesktopCommand, type DesktopCommand } from "./desktop-command.js";
 import { openProjectInVsCode } from "./vscode.js";
@@ -22,11 +23,15 @@ async function runDesktop(event: KeyDownEvent<JsonObject>, command: DesktopComma
 
 async function respondToApproval(event: KeyDownEvent<JsonObject>, choice: "approve" | "reject"): Promise<void> {
   const threadId = controller.activeThreadId;
-  if (!threadId || !controller.isWaitingForApproval(threadId)) {
+  if (!threadId) {
     await event.action.showAlert();
     return;
   }
   try {
+    if (!await controller.recoverApproval(threadId)) {
+      await event.action.showAlert();
+      return;
+    }
     controller.respondToApproval(threadId, choice);
     await event.action.showOk();
   } catch (error) {
@@ -47,6 +52,18 @@ async function openVsCode(event: KeyDownEvent<JsonObject>): Promise<void> {
     await event.action.showOk();
   } catch (error) {
     streamDeck.logger.warn(error instanceof Error ? error.message : "Could not open the selected project in VS Code");
+    await event.action.showAlert();
+  }
+}
+
+async function captureToCodex(event: KeyDownEvent<JsonObject>): Promise<void> {
+  try {
+    await requestCodexCapture();
+    await event.action.showOk();
+  } catch (error) {
+    streamDeck.logger.warn(
+      error instanceof Error ? error.message : "Could not start Capture to Codex"
+    );
     await event.action.showAlert();
   }
 }
@@ -83,6 +100,34 @@ export class ReviewAction extends SingletonAction<JsonObject> {
 export class VoiceAction extends SingletonAction<JsonObject> {
   override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
     await runDesktop(event, "dictate");
+  }
+}
+
+@action({ UUID: "com.codexstreamdeck.agentkeys.capture" })
+export class CaptureAction extends SingletonAction<JsonObject> {
+  override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
+    await captureToCodex(event);
+  }
+}
+
+@action({ UUID: "com.codexstreamdeck.agentkeys.do-it" })
+export class DoItAction extends SingletonAction<JsonObject> {
+  override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
+    await runDesktop(event, "do-it");
+  }
+}
+
+@action({ UUID: "com.codexstreamdeck.agentkeys.guide-me" })
+export class GuideMeAction extends SingletonAction<JsonObject> {
+  override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
+    await runDesktop(event, "guide-me");
+  }
+}
+
+@action({ UUID: "com.codexstreamdeck.agentkeys.commit-merge-deploy" })
+export class CommitMergeDeployAction extends SingletonAction<JsonObject> {
+  override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
+    await runDesktop(event, "commit-merge-deploy");
   }
 }
 

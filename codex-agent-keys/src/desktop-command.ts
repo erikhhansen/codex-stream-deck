@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { openThread } from "./native.js";
 
-export type DesktopCommand = "dictate" | "review" | "terminal";
+export const DESKTOP_COMMANDS = ["commit-merge-deploy", "dictate", "do-it", "guide-me", "review", "terminal"] as const;
+export type DesktopCommand = typeof DESKTOP_COMMANDS[number];
 
 export function nativeCommandPath(): string {
   return fileURLToPath(new URL("./codex-command", import.meta.url));

@@ -2,15 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { compactTokens, localDayBounds, readTokensToday, renderTokensKey, tokensFromJsonl } from "../src/token-usage.js";
 
-function event(timestamp: string, cumulative: number, last = cumulative): string {
+function event(timestamp: string, cumulative: number, cached = 0): string {
   return JSON.stringify({
     timestamp,
     type: "event_msg",
     payload: {
       type: "token_count",
       info: {
-        total_token_usage: { total_tokens: cumulative },
-        last_token_usage: { input_tokens: last, cached_input_tokens: 0, output_tokens: 0, reasoning_output_tokens: 0, total_tokens: last }
+        total_token_usage: { total_tokens: cumulative, cached_input_tokens: cached }
       }
     }
   });
@@ -21,9 +20,9 @@ describe("today's Codex token usage", () => {
     const start = Date.parse("2026-07-19T04:00:00.000Z");
     const end = Date.parse("2026-07-20T04:00:00.000Z");
     const text = [
-      event("2026-07-19T03:30:00.000Z", 1_000, 1_000),
-      event("2026-07-19T05:00:00.000Z", 1_250, 250),
-      event("2026-07-19T06:00:00.000Z", 1_400, 150)
+      event("2026-07-19T03:30:00.000Z", 1_000),
+      event("2026-07-19T05:00:00.000Z", 1_250),
+      event("2026-07-19T06:00:00.000Z", 1_400)
     ].join("\n");
     expect(tokensFromJsonl(text, start, end)).toBe(400);
   });
@@ -37,8 +36,28 @@ describe("today's Codex token usage", () => {
   it("deduplicates a copied token event", () => {
     const start = Date.parse("2026-07-19T04:00:00.000Z");
     const end = Date.parse("2026-07-20T04:00:00.000Z");
-    const copied = event("2026-07-19T05:00:00.000Z", 500, 100);
-    expect(tokensFromJsonl([copied, copied].join("\n"), start, end)).toBe(100);
+    const copied = event("2026-07-19T05:00:00.000Z", 500);
+    expect(tokensFromJsonl([
+      event("2026-07-19T03:30:00.000Z", 400),
+      copied,
+      copied
+    ].join("\n"), start, end)).toBe(100);
+  });
+
+  it("does not recount repeated snapshots with new timestamps", () => {
+    const start = Date.parse("2026-07-19T04:00:00.000Z");
+    const end = Date.parse("2026-07-20T04:00:00.000Z");
+    expect(tokensFromJsonl([
+      event("2026-07-19T05:00:00.000Z", 500),
+      event("2026-07-19T05:01:00.000Z", 500),
+      event("2026-07-19T05:02:00.000Z", 650)
+    ].join("\n"), start, end)).toBe(650);
+  });
+
+  it("weights cached input like Codex's activity dashboard", () => {
+    const start = Date.parse("2026-07-19T04:00:00.000Z");
+    const end = Date.parse("2026-07-20T04:00:00.000Z");
+    expect(tokensFromJsonl(event("2026-07-19T05:00:00.000Z", 1_000, 800), start, end)).toBe(300);
   });
 
   it("uses local calendar-day boundaries", () => {

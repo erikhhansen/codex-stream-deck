@@ -154,6 +154,15 @@ describe("Merge Gate interaction and rendering", () => {
     expect(renderMergeGateKey(classifyMergeGate("t", local(), pullRequest({ failedChecks: ["test"] })))).toContain('fill="#FF86AC"');
     expect(renderMergeGateKey(classifyMergeGate("t", local({ dirtyCount: 2 }), pullRequest()))).toContain("DIRTY");
   });
+
+  it("omits path artwork from two-line status text", () => {
+    const twoLine = renderMergeGateKey(classifyMergeGate("t", local({ dirtyCount: 11 }), pullRequest()));
+    const oneLine = renderMergeGateKey(classifyMergeGate("t", local(), pullRequest()));
+    expect(twoLine).not.toContain('d="M34 28v17');
+    expect(twoLine).not.toContain('d="m99 77');
+    expect(oneLine).toContain('d="M34 28v17');
+    expect(oneLine).toContain('d="m99 77');
+  });
 });
 
 describe("Merge Gate local repository inspection", () => {

@@ -17,6 +17,7 @@ export function statusFor(
 ): StatusView {
   if (connection === "error") return view("error", "ERROR", "#FF86AC", "#2B0A17");
   if (!thread) return view("unassigned", "UNASSIGNED", "#BBC4D1", "#141A22");
+  if (thread.archived) return view("idle", "ARCHIVED", "#BBC4D1", "#141A22");
 
   const type = thread.status?.type ?? "notLoaded";
   const flags = thread.status?.activeFlags ?? [];

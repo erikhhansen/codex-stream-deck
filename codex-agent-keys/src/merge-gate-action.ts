@@ -12,7 +12,8 @@ import type { JsonObject } from "@elgato/utils";
 import { controller } from "./controller.js";
 import { MergeGateService, mergeGateOpenTarget, unavailableMergeGate, type MergeGateSnapshot } from "./merge-gate.js";
 import { renderMergeGateKey } from "./merge-gate-renderer.js";
-import { svgDataUrl } from "./renderer.js";
+import { hostImageDataUrl } from "./host-image.js";
+import { rememberTouchbarWidth, touchbarWidth } from "./touchbar.js";
 import { openProjectInVsCode } from "./vscode.js";
 
 const REFRESH_MS = 30_000;
@@ -42,13 +43,16 @@ export class MergeGateAction extends SingletonAction<JsonObject> {
 
   override async onWillAppear(event: WillAppearEvent<JsonObject>): Promise<void> {
     if (!event.action.isKey()) return;
+    this.#rendered.delete(event.action.id);
+    rememberTouchbarWidth(event.action, event.payload.settings);
     await event.action.setTitle("");
     await this.#render(event.action);
     this.#startTimer();
     await this.#requestRefresh(true);
   }
 
-  override onWillDisappear(_event: WillDisappearEvent<JsonObject>): void {
+  override onWillDisappear(event: WillDisappearEvent<JsonObject>): void {
+    this.#rendered.delete(event.action.id);
     setTimeout(() => {
       if ([...this.actions].length === 0 && this.#refreshTimer) {
         clearInterval(this.#refreshTimer);
@@ -118,9 +122,9 @@ export class MergeGateAction extends SingletonAction<JsonObject> {
   }
 
   async #render(key: KeyAction<JsonObject>): Promise<void> {
-    const svg = renderMergeGateKey(this.#snapshot);
+    const svg = renderMergeGateKey(this.#snapshot, touchbarWidth(key));
     if (this.#rendered.get(key.id) === svg) return;
-    await key.setImage(svgDataUrl(svg));
+    await key.setImage(await hostImageDataUrl(svg));
     this.#rendered.set(key.id, svg);
   }
 }

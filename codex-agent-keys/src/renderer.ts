@@ -44,6 +44,7 @@ export function renderKey(state: StatusView, flashOn = true, selected = false): 
   const text = state.foreground;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#000000"/>
   <rect width="144" height="144" rx="20" fill="${fill}"/>
   <rect x="4" y="4" width="136" height="136" rx="17" fill="none" stroke="${text}" stroke-opacity=".25" stroke-width="2"/>
   ${selected ? '<rect x="4" y="4" width="136" height="136" rx="17" fill="none" stroke="#2878FF" stroke-width="6"/><circle cx="122" cy="21" r="8" fill="#34C978" stroke="#F7FBFF" stroke-width="3"/>' : ""}

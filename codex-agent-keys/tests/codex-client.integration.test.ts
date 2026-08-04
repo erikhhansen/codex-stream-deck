@@ -97,4 +97,18 @@ run("Codex app-server reconnect", () => {
       await client.stop();
     }
   }, 30_000);
+
+  it("can list models and their supported reasoning efforts", async () => {
+    const client = new CodexClient();
+    const executable = process.env.CODEX_PATH || "/Applications/Codex.app/Contents/Resources/codex";
+    try {
+      await client.start(executable);
+      const models = await client.listModels();
+      expect(models.length).toBeGreaterThan(0);
+      expect(models.every((model) => model.model && model.displayName)).toBe(true);
+      expect(models.some((model) => model.supportedReasoningEfforts.length > 0)).toBe(true);
+    } finally {
+      await client.stop();
+    }
+  }, 30_000);
 });

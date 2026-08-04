@@ -105,6 +105,7 @@ export class Coordinator {
   #threads: CodexThread[] = [];
   #preloaded = false;
   #started = false;
+  #stopping = false;
   #connecting = false;
   #lastError = "";
   #codexVersion = "unknown";
@@ -153,6 +154,7 @@ export class Coordinator {
 
   async start(): Promise<void> {
     if (this.#started) return;
+    this.#stopping = false;
     await this.preload();
     this.#started = true;
     const stored = await streamDeck.settings.getGlobalSettings<GlobalSettingsJson>();
@@ -169,6 +171,15 @@ export class Coordinator {
     if (this.#settings.notifyBridgeEnabled) await this.#notify.start().catch((error) => this.#recordError("Notify bridge failed", error));
     await this.#connect();
     this.#schedulePoll();
+  }
+
+  async stop(): Promise<void> {
+    this.#stopping = true;
+    if (this.#reconnectTimer) clearTimeout(this.#reconnectTimer);
+    if (this.#pollTimer) clearTimeout(this.#pollTimer);
+    this.#reconnectTimer = undefined;
+    this.#pollTimer = undefined;
+    await Promise.allSettled([this.#client.stop(), this.#notify.stop()]);
   }
 
   onChange(listener: ChangeListener): () => void {
@@ -197,6 +208,7 @@ export class Coordinator {
   }
 
   async reconnect(): Promise<void> {
+    if (this.#stopping) return;
     if (this.#reconnectTimer) clearTimeout(this.#reconnectTimer);
     this.#reconnectTimer = undefined;
     await this.#client.stop();
@@ -412,7 +424,7 @@ export class Coordinator {
   }
 
   async #connect(): Promise<void> {
-    if (this.#connecting) return;
+    if (this.#connecting || this.#stopping) return;
     this.#connecting = true;
     this.#connection = "starting";
     this.#emitChange();
@@ -639,7 +651,7 @@ export class Coordinator {
   }
 
   #onClientExit(error?: Error): void {
-    if (this.#connection === "starting") return;
+    if (this.#connection === "starting" || this.#stopping) return;
     this.#connection = "offline";
     this.#lastError = error?.message.slice(0, 300) ?? "Codex app-server disconnected";
     this.#emitChange();
@@ -658,7 +670,7 @@ export class Coordinator {
   }
 
   #scheduleReconnect(): void {
-    if (this.#reconnectTimer) return;
+    if (this.#reconnectTimer || this.#stopping) return;
     const delay = this.#connection === "setup" ? 30_000 : this.#reconnectDelay;
     this.#reconnectTimer = setTimeout(() => {
       this.#reconnectTimer = undefined;
@@ -668,6 +680,7 @@ export class Coordinator {
   }
 
   #schedulePoll(): void {
+    if (this.#stopping) return;
     if (this.#pollTimer) clearTimeout(this.#pollTimer);
     const seconds = this.#projects.length ? this.#settings.metadataPollSeconds : this.#settings.backgroundPollSeconds;
     this.#pollTimer = setTimeout(() => {

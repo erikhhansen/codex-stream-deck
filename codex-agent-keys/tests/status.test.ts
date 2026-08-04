@@ -14,6 +14,14 @@ describe("minimal session status", () => {
     expect(statusFor(thread("notLoaded"), "connected", false)).toMatchObject({ status: "idle", color: "#F2F5F8" });
   });
 
+  it("labels an archived mapped session explicitly", () => {
+    expect(statusFor({ ...thread("notLoaded"), archived: true }, "connected", false)).toMatchObject({
+      status: "idle",
+      label: "ARCHIVED",
+      color: "#BBC4D1"
+    });
+  });
+
   it("uses blue while Codex is working", () => {
     expect(statusFor(thread("active"), "connected", false)).toMatchObject({ status: "thinking", color: "#8BB7FF" });
   });
