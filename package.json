@@ -28,7 +28,7 @@
     "ajv": "8.20.0"
   },
   "devDependencies": {
-    "@elgato/cli": "1.7.4",
+    "@elgato/cli": "1.8.1",
     "@openai/codex": "0.144.6",
     "@rollup/plugin-commonjs": "29.0.3",
     "@rollup/plugin-json": "6.1.0",
