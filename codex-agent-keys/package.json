@@ -19,7 +19,7 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@elgato/streamdeck": "2.1.0"
+    "@elgato/streamdeck": "2.1.1"
   },
   "devDependencies": {
     "@elgato/cli": "1.7.4",
