@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { isStreamDock } from "./host-image.js";
+import { isStreamDock } from "./host.js";
 import { svgDataUrl } from "./renderer.js";
 import type { StatusView } from "./types.js";
 

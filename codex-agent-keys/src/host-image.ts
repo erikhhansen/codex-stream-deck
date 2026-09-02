@@ -7,17 +7,13 @@ import { promisify } from "node:util";
 
 import streamDeck from "@elgato/streamdeck";
 
+import { isStreamDock } from "./host.js";
 import { svgDataUrl } from "./renderer.js";
 
 const execFileAsync = promisify(execFile);
 const imageCache = new Map<string, Promise<string>>();
 const rasterDirectory = join(tmpdir(), "codex-agent-keys-streamdock-images");
 let rasterQueue: Promise<void> = Promise.resolve();
-
-export function isStreamDock(): boolean {
-  const major = Number.parseInt(streamDeck.info.application.version.split(".")[0] ?? "", 10);
-  return Number.isFinite(major) && major < 7;
-}
 
 async function rasterizeSvg(svg: string): Promise<string> {
   const hash = createHash("sha256").update(svg).digest("hex").slice(0, 24);

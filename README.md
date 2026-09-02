@@ -6,6 +6,8 @@
 
 Codex Control turns a Stream Deck into a local dashboard for recent Codex tasks. Project keys show the task title, workflow state, and status age. Tap a key to open the exact task; hold it to ask Codex for a fresh, read-only project status.
 
+The sibling `codex-agent-keys/` project is a different, explicit-session control surface. Agent Keys now builds aligned Stream Deck and Stream Dock packages from one shared implementation; Codex Control is not used as its hardware-specific Stream Deck fork.
+
 This is an unofficial community project and is not affiliated with or endorsed by OpenAI or Elgato.
 
 ## Features

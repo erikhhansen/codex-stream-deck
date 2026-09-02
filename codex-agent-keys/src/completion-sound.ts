@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 
 import streamDeck from "@elgato/streamdeck";
 
+import { claimCompletion } from "./completion-claim.js";
 import { getGlobalSettings } from "./global-settings.js";
 
 const SAMPLE_RATE = 44_100;
@@ -13,8 +14,7 @@ const SOUND_PATH = join(
   homedir(),
   "Library",
   "Application Support",
-  "HotSpot",
-  "StreamDock",
+  "Codex Agent Keys",
   "task-complete.wav"
 );
 
@@ -96,17 +96,18 @@ export class CompletionSoundNotifier {
     const now = Date.now();
     if (now - (this.#recent.get(threadId) ?? 0) < 60_000) return;
     this.#recent.set(threadId, now);
-    void this.#play();
+    void this.#play(threadId);
   }
 
   async test(): Promise<void> {
     if (!(await playCompletionChime())) throw new Error("The completion sound could not be played");
   }
 
-  async #play(): Promise<void> {
+  async #play(threadId: string): Promise<void> {
     const settings = await getGlobalSettings();
     if (settings.completionSoundEnabled === false) return;
     try {
+      if (!(await claimCompletion("sound", threadId))) return;
       if (!(await playCompletionChime())) throw new Error("The completion sound could not be played");
     } catch (error) {
       streamDeck.logger.error(error instanceof Error ? error.message : "Could not play completion sound");

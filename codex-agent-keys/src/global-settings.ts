@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 
 import streamDeck from "@elgato/streamdeck";
 
-import { isStreamDock } from "./host-image.js";
+import { isStreamDock } from "./host.js";
 import type { GlobalSettings } from "./types.js";
 
 const streamDockSettingsPath = join(

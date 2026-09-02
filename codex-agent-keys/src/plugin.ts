@@ -9,7 +9,7 @@ import { SpeedAction } from "./speed-action.js";
 import { ModelAction } from "./model-action.js";
 import { EffortAction } from "./effort-action.js";
 import { MergeGateAction } from "./merge-gate-action.js";
-import { isStreamDock } from "./host-image.js";
+import { agentKeysHost, isStreamDock } from "./host.js";
 import { TextEditAction } from "./textedit-action.js";
 
 streamDeck.actions.registerAction(new SessionKeyAction());
@@ -33,11 +33,10 @@ streamDeck.actions.registerAction(new EffortAction());
 streamDeck.actions.registerAction(new MergeGateAction());
 await streamDeck.connect();
 
-if (!isStreamDock()) {
-  // This distribution is intentionally StreamDock-only. In particular, never
-  // launch a second Codex app-server under Elgato Stream Deck.
-  streamDeck.logger.warn("Codex Agent Keys is disabled: this build is for StreamDock only");
-} else {
+const host = agentKeysHost();
+streamDeck.logger.info(`Starting Codex Agent Keys host=${host}`);
+
+if (isStreamDock()) {
   // StreamDock does not terminate plugin helpers when its host process exits.
   // The controller's timers and Codex child process otherwise keep Node alive,
   // causing stale plugin instances to accumulate across app restarts.
@@ -48,5 +47,9 @@ if (!isStreamDock()) {
     void controller.stop().finally(() => process.exit(0));
   }, 1_000);
   parentWatchdog.unref();
-  await controller.start();
 }
+
+// Passive refresh never resumes a Desktop-owned task. Each host can therefore
+// keep its own read-only app-server connection without acquiring a task writer
+// lock or stealing ownership from Codex Desktop.
+await controller.start();

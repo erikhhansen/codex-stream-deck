@@ -1,19 +1,24 @@
 {
-  "name": "codex-agent-keys-streamdock",
+  "name": "codex-agent-keys",
   "version": "0.4.1",
   "private": true,
   "type": "module",
   "scripts": {
     "icons": "node scripts/generate-plugin-icons.mjs",
     "icons:streamdock": "node scripts/generate-streamdock-session-images.mjs",
+    "manifest:streamdeck": "node scripts/generate-host-manifest.mjs streamdeck",
     "manifest:streamdock": "node scripts/generate-streamdock-manifest.mjs",
     "build": "npm run build:native && rollup --config",
     "build:native": "xcrun swiftc native/codex-command.swift -o com.codexstreamdeck.agentkeys.sdPlugin/bin/codex-command -module-cache-path /private/tmp/codex-agent-keys-swift-cache",
     "dev": "rollup --config --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "prepare:streamdeck": "node scripts/prepare-host-package.mjs streamdeck dist/streamdeck/com.codexstreamdeck.agentkeys.sdPlugin",
+    "prepare:streamdock": "node scripts/prepare-host-package.mjs streamdock dist/streamdock/com.codexstreamdeck.agentkeys.sdPlugin",
     "validate": "streamdeck validate com.codexstreamdeck.agentkeys.sdPlugin --no-update-check",
-    "pack": "npm run icons && npm run build && streamdeck pack com.codexstreamdeck.agentkeys.sdPlugin --force --no-update-check"
+    "package:streamdeck": "npm run build && npm run prepare:streamdeck && streamdeck pack dist/streamdeck/com.codexstreamdeck.agentkeys.sdPlugin --force --no-update-check",
+    "package:streamdock": "npm run build && npm run prepare:streamdock && node scripts/package-streamdock.mjs",
+    "pack": "npm run package:streamdeck"
   },
   "engines": {
     "node": ">=20"

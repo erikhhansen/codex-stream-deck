@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 
 import streamDeck from "@elgato/streamdeck";
 
+import { claimCompletion } from "./completion-claim.js";
 import { getGlobalSettings } from "./global-settings.js";
 import type { CompletionEmailStats, GlobalSettings } from "./types.js";
 
@@ -85,7 +86,7 @@ export class CompletionEmailNotifier {
     const now = Date.now();
     if (now - (this.#recent.get(threadId) ?? 0) < 60_000) return;
     this.#recent.set(threadId, now);
-    void this.#send(name.trim() || "Codex agent", stats);
+    void this.#send(threadId, name.trim() || "Codex agent", stats);
   }
 
   async validate(): Promise<number> {
@@ -100,10 +101,11 @@ export class CompletionEmailNotifier {
     }, true);
   }
 
-  async #send(name: string, readStats: () => Promise<CompletionEmailStats>): Promise<void> {
+  async #send(threadId: string, name: string, readStats: () => Promise<CompletionEmailStats>): Promise<void> {
     const settings = await getGlobalSettings();
     if (settings.completionEmailEnabled !== true) return;
     try {
+      if (!(await claimCompletion("email", threadId))) return;
       await postEmail(settings, name, await readStats(), false);
     } catch (error) {
       streamDeck.logger.error(error instanceof Error ? error.message : "Could not send completion email");

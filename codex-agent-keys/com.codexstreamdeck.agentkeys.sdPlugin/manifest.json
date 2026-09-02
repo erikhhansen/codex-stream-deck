@@ -445,9 +445,9 @@
   "Category": "Codex Agent Keys",
   "CategoryIcon": "imgs/category",
   "CodePath": "bin/plugin.js",
-  "Description": "StreamDock-only controls for pinned Codex sessions.",
+  "Description": "Shared Stream Deck and Stream Dock controls for pinned Codex sessions.",
   "Icon": "imgs/plugin",
-  "Name": "Codex Agent Keys for StreamDock",
+  "Name": "Codex Agent Keys",
   "Nodejs": {
     "Version": "24"
   },

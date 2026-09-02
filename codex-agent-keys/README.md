@@ -1,6 +1,6 @@
-# Codex Agent Keys for StreamDock
+# Codex Agent Keys
 
-A deliberately small StreamDock plugin for keeping several concurrent Codex sessions visible. This build is intentionally disabled under Elgato Stream Deck so the two hosts can never launch competing Codex app-server processes.
+A shared Stream Deck and Stream Dock plugin for keeping several concurrent Codex sessions visible. Both packages are built from the same actions and controller; only the host manifest, image compatibility, settings persistence, and lifecycle behavior differ.
 
 ## Version 0.4
 
@@ -25,16 +25,16 @@ The **Codex Session** action pins, selects, and opens one exact Codex thread. Gu
 - **Effort** — cycle the selected session through the effort levels advertised by its current model.
 - **Merge Gate (Beta)** — show the selected task's highest local Git or GitHub pull-request blocker and open the relevant evidence.
 
-1. Drag it onto a StreamDock key.
+1. Drag it onto a Stream Deck or Stream Dock key.
 2. Select the exact Codex session to pin.
 3. Optionally give the key a shorter display name.
 4. Tap the key to make it the active target and open that session in Codex.
 
-The active target is stored as a stable Codex thread ID in StreamDock's local application data. It does not depend on which macOS window happens to have focus. Its Agent key receives a blue accent border and green dot; those selection marks remain independent of the status color.
+The active target is stored as a stable Codex thread ID in the host's local application data. It does not depend on which macOS window happens to have focus. Its Agent key receives a blue accent border and green dot; those selection marks remain independent of the status color.
 
 Dependent actions read this explicit target and remain guarded when it is empty. Approve and Reject are additionally guarded unless the plugin holds an exact, unresolved Codex approval request for that thread. They respond to that request ID through the Codex app-server protocol; they do not simulate Return or Escape. Generic permission-profile and user-input prompts are deliberately excluded because they cannot be safely reduced to yes/no. Selection can be cleared from the Agent key's property inspector; it does not need a dedicated physical key.
 
-On macOS, Terminal, Review, Dictate, Do It, Guide Me, and Commit, Merge, Deploy navigate to the stored thread and then operate directly on Codex Desktop. VS Code resolves the task's working directory to its Git worktree root, then opens that folder with VS Code's bundled launcher. GitHub resolves the same worktree, converts its `origin` remote to an HTTPS GitHub URL, and opens it in the default browser. Dictate presses Codex's native composer control. The prompt buttons locate the composer beside that control, replace its contents with their respective prompt, and submit it. Capture to Codex invokes the installed menu-bar helper and targets whichever Codex task is currently active; each press adds one image to the draft without pressing Return. StreamDock must be allowed under **System Settings → Privacy & Security → Accessibility**.
+On macOS, Terminal, Review, Dictate, Do It, Guide Me, and Commit, Merge, Deploy navigate to the stored thread and then operate directly on Codex Desktop. VS Code resolves the task's working directory to its Git worktree root, then opens that folder with VS Code's bundled launcher. GitHub resolves the same worktree, converts its `origin` remote to an HTTPS GitHub URL, and opens it in the default browser. Dictate presses Codex's native composer control. The prompt buttons locate the composer beside that control, replace its contents with their respective prompt, and submit it. Capture to Codex invokes the installed menu-bar helper and targets whichever Codex task is currently active; each press adds one image to the draft without pressing Return. The active host must be allowed under **System Settings → Privacy & Security → Accessibility**.
 
 ### Codex task ownership
 
@@ -64,7 +64,7 @@ The whole key uses the current status color:
 
 ## Development
 
-Requires Node.js 20+, StreamDock 3.10.188.226+, and an authenticated Codex CLI with app-server support.
+Requires an authenticated Codex CLI with app-server support. Stream Deck uses SDK 3, Node.js 24, and Stream Deck 7.1+. Stream Dock uses SDK 1, Node.js 20, and Stream Dock 3.10.188.226+.
 
 ```bash
 npm ci
@@ -72,11 +72,12 @@ npm run typecheck
 npm test
 npm run build
 npm run validate
-npm run pack
+npm run package:streamdeck
+npm run package:streamdock
 ```
 
-The deployable plugin directory is `com.codexstreamdeck.agentkeys.sdPlugin`. Generate its StreamDock manifest with `npm run manifest:streamdock -- <output-path>` before deployment.
+The canonical plugin directory contains the modern Stream Deck manifest. `package:streamdeck` creates the validated Stream Deck package. `package:streamdock` creates a separate legacy-manifest package in `dist/`; it never overwrites the canonical manifest. Both packages contain the same action UUIDs and JavaScript runtime.
 
-This project is intentionally independent from both Elgato Stream Deck and the larger inherited Codex Control plugin in the parent repository.
+This project is independent from the larger Codex Control dashboard in the parent repository. Codex Control remains a distinct product surface; it is not the Stream Deck edition of Agent Keys.
 
 See [KEYSET-MAPPING.md](KEYSET-MAPPING.md) for a position-by-position interpretation of the Codex Micro icon keyset and the proposed Stream Deck rollout.

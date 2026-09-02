@@ -1,7 +1,7 @@
 import type { KeyAction } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
-import { isStreamDock } from "./host-image.js";
+import { isStreamDock } from "./host.js";
 
 interface TouchbarSettings extends JsonObject {
   touchbarWidth?: number;

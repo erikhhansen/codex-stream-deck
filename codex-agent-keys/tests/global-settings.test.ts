@@ -8,7 +8,7 @@ const { isStreamDock, mkdir, readFile, setHostGlobalSettings, writeFile } = vi.h
   writeFile: vi.fn().mockResolvedValue(undefined)
 }));
 
-vi.mock("../src/host-image.js", () => ({ isStreamDock }));
+vi.mock("../src/host.js", () => ({ isStreamDock }));
 vi.mock("node:fs/promises", () => ({ mkdir, readFile, writeFile }));
 vi.mock("@elgato/streamdeck", () => ({
   default: {

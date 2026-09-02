@@ -1,2 +1,3 @@
 com.codexstreamdeck.agentkeys.sdPlugin/bin/
 *.streamDeckPlugin
+dist/
