@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import { promisify } from "node:util";
 
+import { githubRepositoryUrl } from "./github.js";
+
 const execFileAsync = promisify(execFile);
 
 export type MergeGateState =
@@ -102,16 +104,6 @@ function text(value: unknown): string {
 
 function countLabel(state: MergeGateState, count: number): string {
   return count > 0 && ["DIRTY", "CI FAIL", "CI"].includes(state) ? `${state} ${count}` : state;
-}
-
-function githubRepositoryUrl(remote: string): string | undefined {
-  const candidate = remote.trim().replace(/\.git$/i, "");
-  const scp = candidate.match(/^git@github\.com:([^/]+\/.+)$/i);
-  if (scp) return `https://github.com/${scp[1]}`;
-  const ssh = candidate.match(/^ssh:\/\/git@github\.com\/([^/]+\/.+)$/i);
-  if (ssh) return `https://github.com/${ssh[1]}`;
-  const https = candidate.match(/^https?:\/\/github\.com\/([^/]+\/.+)$/i);
-  return https ? `https://github.com/${https[1]}` : undefined;
 }
 
 function compareUrl(repositoryUrl: string | undefined, branch: string): string | undefined {

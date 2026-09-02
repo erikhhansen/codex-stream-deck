@@ -24,6 +24,17 @@ class RuntimeDesktopSettingsClient implements DesktopSettingsClient {
   readonly close = vi.fn();
 }
 
+function createController(
+  client: RuntimeSettingsClient,
+  desktop = new RuntimeDesktopSettingsClient()
+): AgentKeysController {
+  return new AgentKeysController(
+    client as unknown as CodexClient,
+    desktop,
+    (threadId) => client.readThreadRuntimeSettings(threadId)
+  );
+}
+
 describe("Agent Keys runtime settings", () => {
   it("deduplicates concurrent reads and replaces stale cached settings", async () => {
     const client = new RuntimeSettingsClient();
@@ -31,7 +42,7 @@ describe("Agent Keys runtime settings", () => {
     client.readThreadRuntimeSettings.mockImplementationOnce(() => new Promise((resolve) => {
       resolveFirst = resolve;
     }));
-    const controller = new AgentKeysController(client as unknown as CodexClient);
+    const controller = createController(client);
 
     const first = controller.refreshRuntimeSettings("relay");
     const concurrent = controller.refreshRuntimeSettings("relay");
@@ -51,24 +62,17 @@ describe("Agent Keys runtime settings", () => {
     expect(controller.serviceTier("relay")).toBeNull();
   });
 
-  it("resubscribes to recover an unresolved approval after reconnect", async () => {
+  it("does not resume a thread to recover an unresolved approval", async () => {
     const client = new RuntimeSettingsClient();
     client.listThreads.mockResolvedValueOnce([{
       id: "relay",
       status: { type: "active", activeFlags: ["waitingOnApproval"] }
     }]);
-    const controller = new AgentKeysController(client as unknown as CodexClient);
+    const controller = createController(client);
     await controller.refresh();
-    client.readThreadRuntimeSettings.mockImplementationOnce(async (threadId) => {
-      client.emit("serverRequest", 42, "item/commandExecution/requestApproval", {
-        threadId,
-        availableDecisions: ["accept", "decline"]
-      });
-      return { model: "gpt-5.6-sol", serviceTier: "priority", reasoningEffort: "high" };
-    });
-
-    expect(await controller.recoverApproval("relay")).toBe(true);
-    expect(controller.isWaitingForApproval("relay")).toBe(true);
+    expect(await controller.recoverApproval("relay")).toBe(false);
+    expect(controller.isWaitingForApproval("relay")).toBe(false);
+    expect(client.readThreadRuntimeSettings).not.toHaveBeenCalled();
   });
 
   it("retains mapped archived sessions without trying to resume them", async () => {
@@ -79,7 +83,7 @@ describe("Agent Keys runtime settings", () => {
       cwd: "/tmp/project",
       status: { type: "notLoaded" }
     }] : []);
-    const controller = new AgentKeysController(client as unknown as CodexClient);
+    const controller = createController(client);
     controller.watchThread("archived-session");
 
     await controller.refresh();
@@ -98,7 +102,7 @@ describe("Agent Keys runtime settings", () => {
       serviceTier: null,
       reasoningEffort: "high"
     });
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await controller.toggleServiceTier("relay");
     expect(desktop.updateThreadSettings).toHaveBeenLastCalledWith("relay", { serviceTier: "priority" });
@@ -114,7 +118,7 @@ describe("Agent Keys runtime settings", () => {
     try {
       const client = new RuntimeSettingsClient();
       const desktop = new RuntimeDesktopSettingsClient();
-      const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+      const controller = createController(client, desktop);
       await controller.setServiceTier("relay", "priority");
 
       client.emit("notification", "turn/completed", { threadId: "other" });
@@ -139,7 +143,7 @@ describe("Agent Keys runtime settings", () => {
       serviceTier: null,
       reasoningEffort: "medium"
     });
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await controller.setServiceTier("relay", "priority");
     await controller.refreshRuntimeSettings("relay");
@@ -164,7 +168,7 @@ describe("Agent Keys runtime settings", () => {
     const client = new RuntimeSettingsClient();
     const desktop = new RuntimeDesktopSettingsClient();
     desktop.updateThreadSettings.mockRejectedValueOnce(new Error("no-client-found"));
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await expect(controller.setServiceTier("relay", "priority")).rejects.toThrow("no-client-found");
     expect(controller.serviceTier("relay")).toBeUndefined();
@@ -173,7 +177,7 @@ describe("Agent Keys runtime settings", () => {
   it("ignores stale settings notifications until the desktop write converges", async () => {
     const client = new RuntimeSettingsClient();
     const desktop = new RuntimeDesktopSettingsClient();
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await controller.setServiceTier("relay", "priority");
     client.emit("notification", "thread/settings/updated", {
@@ -201,7 +205,7 @@ describe("Agent Keys runtime settings", () => {
       serviceTier: null,
       reasoningEffort: "high"
     });
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await controller.cycleModel("relay", 1);
     expect(desktop.updateThreadSettings).toHaveBeenLastCalledWith("relay", { model: "gpt-5.6-terra", effort: "high" });
@@ -217,7 +221,7 @@ describe("Agent Keys runtime settings", () => {
       serviceTier: null,
       reasoningEffort: "ultra"
     });
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await controller.cycleModel("relay", 1);
 
@@ -233,7 +237,7 @@ describe("Agent Keys runtime settings", () => {
       serviceTier: null,
       reasoningEffort: "medium"
     });
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await controller.cycleEffort("relay", 1);
     expect(desktop.updateThreadSettings).toHaveBeenLastCalledWith("relay", { effort: "high" });
@@ -249,7 +253,7 @@ describe("Agent Keys runtime settings", () => {
       serviceTier: null,
       reasoningEffort: "medium"
     });
-    const controller = new AgentKeysController(client as unknown as CodexClient, desktop);
+    const controller = createController(client, desktop);
 
     await controller.cycleEffort("relay", 1);
 

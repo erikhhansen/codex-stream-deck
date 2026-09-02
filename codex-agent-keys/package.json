@@ -1,5 +1,5 @@
 {
-  "name": "codex-agent-keys",
+  "name": "codex-agent-keys-streamdock",
   "version": "0.4.1",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "pack": "npm run icons && npm run build && streamdeck pack com.codexstreamdeck.agentkeys.sdPlugin --force --no-update-check"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=20"
   },
   "dependencies": {
     "@elgato/streamdeck": "2.1.0"

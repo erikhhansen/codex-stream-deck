@@ -21,7 +21,7 @@ export class TokensTodayAction extends SingletonAction<JsonObject> {
   constructor() {
     super();
     setInterval(() => {
-      if ([...this.actions].length > 0) void this.#refresh();
+      if ([...this.actions].length > 0) void this.#refreshSilently();
     }, 60_000);
   }
 
@@ -30,7 +30,7 @@ export class TokensTodayAction extends SingletonAction<JsonObject> {
     this.#rendered.delete(event.action.id);
     rememberTouchbarWidth(event.action, event.payload.settings);
     await this.#render(event.action);
-    void this.#refresh();
+    void this.#refreshSilently();
   }
 
   override onWillDisappear(event: WillDisappearEvent<JsonObject>): void {
@@ -56,6 +56,14 @@ export class TokensTodayAction extends SingletonAction<JsonObject> {
       this.#refreshing = undefined;
     });
     return this.#refreshing;
+  }
+
+  async #refreshSilently(): Promise<void> {
+    try {
+      await this.#refresh();
+    } catch (error) {
+      streamDeck.logger.warn(error instanceof Error ? error.message : "Could not read today's Codex tokens");
+    }
   }
 
   async #render(key: KeyAction<JsonObject>): Promise<void> {

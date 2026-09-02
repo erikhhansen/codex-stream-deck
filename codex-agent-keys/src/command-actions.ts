@@ -4,6 +4,7 @@ import type { JsonObject } from "@elgato/utils";
 import { requestCodexCapture } from "./capture-helper.js";
 import { controller } from "./controller.js";
 import { runSelectedDesktopCommand, type DesktopCommand } from "./desktop-command.js";
+import { resolveGithubRepositoryUrl } from "./github.js";
 import { openProjectInVsCode } from "./vscode.js";
 
 async function runDesktop(event: KeyDownEvent<JsonObject>, command: DesktopCommand): Promise<void> {
@@ -29,7 +30,7 @@ async function respondToApproval(event: KeyDownEvent<JsonObject>, choice: "appro
   }
   try {
     if (!await controller.recoverApproval(threadId)) {
-      await event.action.showAlert();
+      streamDeck.logger.info(`No actionable approval request for selected thread: ${threadId}`);
       return;
     }
     controller.respondToApproval(threadId, choice);
@@ -52,6 +53,22 @@ async function openVsCode(event: KeyDownEvent<JsonObject>): Promise<void> {
     await event.action.showOk();
   } catch (error) {
     streamDeck.logger.warn(error instanceof Error ? error.message : "Could not open the selected project in VS Code");
+    await event.action.showAlert();
+  }
+}
+
+async function openGithub(event: KeyDownEvent<JsonObject>): Promise<void> {
+  const threadId = controller.activeThreadId;
+  const cwd = controller.thread(threadId)?.cwd;
+  if (!threadId || !cwd) {
+    await event.action.showAlert();
+    return;
+  }
+  try {
+    await streamDeck.system.openUrl(await resolveGithubRepositoryUrl(cwd));
+    await event.action.showOk();
+  } catch (error) {
+    streamDeck.logger.warn(error instanceof Error ? error.message : "Could not open the selected repository on GitHub");
     await event.action.showAlert();
   }
 }
@@ -135,5 +152,12 @@ export class CommitMergeDeployAction extends SingletonAction<JsonObject> {
 export class VsCodeAction extends SingletonAction<JsonObject> {
   override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
     await openVsCode(event);
+  }
+}
+
+@action({ UUID: "com.codexstreamdeck.agentkeys.github" })
+export class GithubAction extends SingletonAction<JsonObject> {
+  override async onKeyDown(event: KeyDownEvent<JsonObject>): Promise<void> {
+    await openGithub(event);
   }
 }

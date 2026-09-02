@@ -1,122 +1,61 @@
-import { createReadStream } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createInterface } from "node:readline";
 
-interface TokenPoint {
-  at: number;
-  cumulativeTokens: number;
-  key: string;
+interface TokenUsageOptions {
+  authPath?: string;
+  fetchImpl?: typeof fetch;
 }
 
-// Codex's activity dashboard normalizes cached input at one eighth of an
-// uncached token. Use the same weighting so this counter matches the app.
-const CACHED_INPUT_WEIGHT = 1 / 8;
+const PROFILE_URL = "https://chatgpt.com/backend-api/wham/profiles/me";
 
-function tokenPoint(line: string): TokenPoint | undefined {
-  try {
-    const event = JSON.parse(line) as {
-      timestamp?: unknown;
-      payload?: {
-        type?: unknown;
-        info?: {
-          total_token_usage?: {
-            cached_input_tokens?: unknown;
-            total_tokens?: unknown;
-          } | null;
-        } | null;
-      };
-    };
-    if (event.payload?.type !== "token_count" || typeof event.timestamp !== "string") return undefined;
-    const at = Date.parse(event.timestamp);
-    const usage = event.payload.info?.total_token_usage;
-    const totalTokens = usage?.total_tokens;
-    const cachedInputTokens = usage?.cached_input_tokens ?? 0;
-    if (!Number.isFinite(at)
-      || typeof totalTokens !== "number"
-      || !Number.isFinite(totalTokens)
-      || totalTokens < 0
-      || typeof cachedInputTokens !== "number"
-      || !Number.isFinite(cachedInputTokens)
-      || cachedInputTokens < 0) return undefined;
-    const cumulativeTokens = totalTokens - cachedInputTokens * (1 - CACHED_INPUT_WEIGHT);
-    const key = `${event.timestamp}|${totalTokens}|${cachedInputTokens}`;
-    return { at, cumulativeTokens, key };
-  } catch {
-    return undefined;
-  }
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
 }
 
-function accumulate(seen: Set<string>, point: TokenPoint, delta: number, start: number, end: number): number {
-  if (point.at < start || point.at >= end || seen.has(point.key)) return 0;
-  seen.add(point.key);
-  return delta;
+export function localDateIso(now = new Date()): string {
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-export function tokensFromJsonl(text: string, start: number, end: number): number {
-  const seen = new Set<string>();
+export function profileTokensForDate(value: unknown, dateIso: string): number | undefined {
+  const buckets = record(record(value)?.stats)?.daily_usage_buckets;
+  if (!Array.isArray(buckets)) return undefined;
   let total = 0;
-  let previous: number | undefined;
-  for (const line of text.split(/\r?\n/)) {
-    const point = tokenPoint(line);
-    if (!point) continue;
-    const delta = previous === undefined || point.cumulativeTokens < previous
-      ? point.cumulativeTokens
-      : point.cumulativeTokens - previous;
-    previous = point.cumulativeTokens;
-    total += accumulate(seen, point, delta, start, end);
+  for (const item of buckets) {
+    const bucket = record(item);
+    if (bucket?.start_date !== dateIso) continue;
+    const tokens = bucket.tokens;
+    if (typeof tokens !== "number" || !Number.isFinite(tokens)) return undefined;
+    total += Math.max(0, tokens);
   }
   return Math.round(total);
 }
 
-async function candidateFiles(root: string, start: number): Promise<string[]> {
-  const files: string[] = [];
-  const visit = async (directory: string): Promise<void> => {
-    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-    await Promise.all(entries.map(async (entry) => {
-      const itemPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) return visit(itemPath);
-      if (!entry.isFile() || !entry.name.endsWith(".jsonl")) return;
-      const info = await stat(itemPath).catch(() => undefined);
-      if (info?.isFile() && info.mtimeMs >= start) files.push(itemPath);
-    }));
-  };
-  await visit(root);
-  return files;
-}
-
-async function tokensFromFile(filePath: string, start: number, end: number, seen: Set<string>): Promise<number> {
-  let total = 0;
-  let previous: number | undefined;
-  const lines = createInterface({ input: createReadStream(filePath, { encoding: "utf8" }), crlfDelay: Infinity });
-  for await (const line of lines) {
-    const point = tokenPoint(line);
-    if (!point) continue;
-    const delta = previous === undefined || point.cumulativeTokens < previous
-      ? point.cumulativeTokens
-      : point.cumulativeTokens - previous;
-    previous = point.cumulativeTokens;
-    total += accumulate(seen, point, delta, start, end);
+export async function readTokensToday(now = new Date(), options: TokenUsageOptions = {}): Promise<number> {
+  const authPath = options.authPath ?? path.join(os.homedir(), ".codex", "auth.json");
+  const auth = record(JSON.parse(await readFile(authPath, "utf8")));
+  const tokens = record(auth?.tokens);
+  const accessToken = tokens?.access_token;
+  const accountId = tokens?.account_id;
+  if (typeof accessToken !== "string" || !accessToken || typeof accountId !== "string" || !accountId) {
+    throw new Error("Codex ChatGPT authentication is unavailable");
   }
+  const response = await (options.fetchImpl ?? fetch)(PROFILE_URL, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "ChatGPT-Account-Id": accountId
+    },
+    signal: AbortSignal.timeout(10_000)
+  });
+  if (!response.ok) throw new Error(`Codex profile usage request failed with status ${response.status}`);
+  const total = profileTokensForDate(await response.json(), localDateIso(now));
+  if (total === undefined) throw new Error("Codex profile usage response was invalid");
   return total;
-}
-
-export function localDayBounds(now = new Date()): { start: number; end: number } {
-  const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  return { start: startDate.getTime(), end: endDate.getTime() };
-}
-
-export async function readTokensToday(now = new Date()): Promise<number> {
-  const { start, end } = localDayBounds(now);
-  const codexRoot = path.join(os.homedir(), ".codex");
-  const roots = [path.join(codexRoot, "sessions"), path.join(codexRoot, "archived_sessions")];
-  const files = (await Promise.all(roots.map((root) => candidateFiles(root, start)))).flat();
-  const seen = new Set<string>();
-  let total = 0;
-  for (const filePath of files) total += await tokensFromFile(filePath, start, end, seen);
-  return Math.round(total);
 }
 
 export function compactTokens(total: number): string {

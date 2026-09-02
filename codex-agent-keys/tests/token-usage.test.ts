@@ -1,68 +1,66 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { compactTokens, localDayBounds, readTokensToday, renderTokensKey, tokensFromJsonl } from "../src/token-usage.js";
-
-function event(timestamp: string, cumulative: number, cached = 0): string {
-  return JSON.stringify({
-    timestamp,
-    type: "event_msg",
-    payload: {
-      type: "token_count",
-      info: {
-        total_token_usage: { total_tokens: cumulative, cached_input_tokens: cached }
-      }
-    }
-  });
-}
+import { compactTokens, localDateIso, profileTokensForDate, readTokensToday, renderTokensKey } from "../src/token-usage.js";
 
 describe("today's Codex token usage", () => {
-  it("adds individual model calls instead of cumulative counters", () => {
-    const start = Date.parse("2026-07-19T04:00:00.000Z");
-    const end = Date.parse("2026-07-20T04:00:00.000Z");
-    const text = [
-      event("2026-07-19T03:30:00.000Z", 1_000),
-      event("2026-07-19T05:00:00.000Z", 1_250),
-      event("2026-07-19T06:00:00.000Z", 1_400)
-    ].join("\n");
-    expect(tokensFromJsonl(text, start, end)).toBe(400);
+  it("uses the same daily usage bucket reported by Codex Desktop", () => {
+    expect(profileTokensForDate({
+      stats: {
+        daily_usage_buckets: [
+          { start_date: "2026-08-03", tokens: 10 },
+          { start_date: "2026-08-04", tokens: 277_335_078 }
+        ]
+      }
+    }, "2026-08-04")).toBe(277_335_078);
   });
 
-  it("counts a session that starts today from zero", () => {
-    const start = Date.parse("2026-07-19T04:00:00.000Z");
-    const end = Date.parse("2026-07-20T04:00:00.000Z");
-    expect(tokensFromJsonl(event("2026-07-19T05:00:00.000Z", 850), start, end)).toBe(850);
+  it("sums duplicate buckets and clamps negative corrections like Codex Desktop", () => {
+    expect(profileTokensForDate({
+      stats: {
+        daily_usage_buckets: [
+          { start_date: "2026-08-04", tokens: 200 },
+          { start_date: "2026-08-04", tokens: -50 },
+          { start_date: "2026-08-04", tokens: 75 }
+        ]
+      }
+    }, "2026-08-04")).toBe(275);
   });
 
-  it("deduplicates a copied token event", () => {
-    const start = Date.parse("2026-07-19T04:00:00.000Z");
-    const end = Date.parse("2026-07-20T04:00:00.000Z");
-    const copied = event("2026-07-19T05:00:00.000Z", 500);
-    expect(tokensFromJsonl([
-      event("2026-07-19T03:30:00.000Z", 400),
-      copied,
-      copied
-    ].join("\n"), start, end)).toBe(100);
+  it("returns zero when the profile has no bucket for today", () => {
+    expect(profileTokensForDate({ stats: { daily_usage_buckets: [] } }, "2026-08-04")).toBe(0);
   });
 
-  it("does not recount repeated snapshots with new timestamps", () => {
-    const start = Date.parse("2026-07-19T04:00:00.000Z");
-    const end = Date.parse("2026-07-20T04:00:00.000Z");
-    expect(tokensFromJsonl([
-      event("2026-07-19T05:00:00.000Z", 500),
-      event("2026-07-19T05:01:00.000Z", 500),
-      event("2026-07-19T05:02:00.000Z", 650)
-    ].join("\n"), start, end)).toBe(650);
+  it("uses the local calendar date expected by the Daily chart", () => {
+    expect(localDateIso(new Date(2026, 7, 4, 23, 59))).toBe("2026-08-04");
   });
 
-  it("weights cached input like Codex's activity dashboard", () => {
-    const start = Date.parse("2026-07-19T04:00:00.000Z");
-    const end = Date.parse("2026-07-20T04:00:00.000Z");
-    expect(tokensFromJsonl(event("2026-07-19T05:00:00.000Z", 1_000, 800), start, end)).toBe(300);
-  });
-
-  it("uses local calendar-day boundaries", () => {
-    const { start, end } = localDayBounds(new Date(2026, 6, 19, 12));
-    expect(end - start).toBe(24 * 60 * 60 * 1_000);
+  it("authenticates and reads the exact profile bucket", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "codex-token-usage-"));
+    const authPath = path.join(directory, "auth.json");
+    await writeFile(authPath, JSON.stringify({
+      tokens: { access_token: "test-access-token", account_id: "test-account" }
+    }));
+    try {
+      const total = await readTokensToday(new Date(2026, 7, 4, 12), {
+        authPath,
+        fetchImpl: async (input, init) => {
+          expect(String(input)).toBe("https://chatgpt.com/backend-api/wham/profiles/me");
+          const headers = new Headers(init?.headers);
+          expect(headers.get("Authorization")).toBe("Bearer test-access-token");
+          expect(headers.get("ChatGPT-Account-Id")).toBe("test-account");
+          return new Response(JSON.stringify({
+            stats: { daily_usage_buckets: [{ start_date: "2026-08-04", tokens: 277_335_078 }] }
+          }));
+        }
+      });
+      expect(total).toBe(277_335_078);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("formats Stream Deck-sized values", () => {
@@ -76,8 +74,8 @@ describe("today's Codex token usage", () => {
 
 const local = process.env.RUN_CODEX_INTEGRATION === "1" ? describe : describe.skip;
 
-local("local Codex token logs", () => {
-  it("returns today's recorded token total", async () => {
-    expect(await readTokensToday()).toBeGreaterThan(0);
+local("Codex profile usage", () => {
+  it("returns today's reported token total", async () => {
+    expect(await readTokensToday()).toBeGreaterThanOrEqual(0);
   }, 30_000);
 });

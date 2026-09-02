@@ -1,4 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@elgato/streamdeck", () => ({
+  default: {
+    logger: {
+      error: vi.fn(),
+      info: vi.fn()
+    }
+  }
+}));
 
 import { COMPLETION_EMAIL_SUBJECT, completionEmailBody, DEFAULT_EMAIL_SENDER, sendGridPayload } from "../src/completion-email.js";
 

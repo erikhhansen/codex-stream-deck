@@ -27,6 +27,7 @@ export type KeySettings = {
 export type GlobalSettings = {
   codexPath?: string;
   activeThreadId?: string;
+  completionSoundEnabled?: boolean;
   completionEmailEnabled?: boolean;
   completionEmailSender?: string;
   completionEmailRecipient?: string;

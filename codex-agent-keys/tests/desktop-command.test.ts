@@ -18,6 +18,9 @@ describe("selected Codex desktop commands", () => {
     expect(nativeSource).toContain('case .commitMergeDeploy: "Commit, Merge, Deploy"');
     expect(nativeSource).toContain('case .guideMe: "Guide Me"');
     expect(nativeSource).toContain("== composerText");
+    expect(nativeSource).toContain("func findComposer(_ root: AXUIElement)");
+    expect(nativeSource).toContain("let hinted = candidates.filter(composerHint)");
+    expect(nativeSource).toContain("return textAreas.count == 1 ? textAreas[0] : nil");
     const pluginRoot = fileURLToPath(new URL("../com.codexstreamdeck.agentkeys.sdPlugin/", import.meta.url));
     const manifest = JSON.parse(await readFile(`${pluginRoot}manifest.json`, "utf8")) as {
       Actions: Array<{ UUID: string; Icon: string; OS?: string[] }>;

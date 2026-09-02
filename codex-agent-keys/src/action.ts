@@ -13,6 +13,7 @@ import type { JsonValue } from "@elgato/utils";
 
 import { controller } from "./controller.js";
 import { completionEmailNotifier } from "./completion-email.js";
+import { completionSoundNotifier } from "./completion-sound.js";
 import { openThread } from "./native.js";
 import { renderKey, wrapTitle } from "./renderer.js";
 import { sessionImageDataUrl } from "./session-image.js";
@@ -27,7 +28,7 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
   constructor() {
     super();
     controller.onChange(() => this.#scheduleRender());
-    controller.onTurnCompleted((threadId) => void this.#queueCompletionEmail(threadId));
+    controller.onTurnCompleted((threadId) => void this.#queueCompletionNotifications(threadId));
   }
 
   override async onWillAppear(event: WillAppearEvent<KeySettings>): Promise<void> {
@@ -87,6 +88,15 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
         });
         return;
       }
+      if (message.op === "testCompletionSound") {
+        await completionSoundNotifier.test();
+        await streamDeck.ui.sendToPropertyInspector({
+          type: "result",
+          ok: true,
+          message: "Played the completion sound."
+        });
+        return;
+      }
       const settings = this.#settings.get(event.action.id) ?? {};
       await streamDeck.ui.sendToPropertyInspector(controller.inspectorState(settings.threadId));
     } catch (error) {
@@ -115,9 +125,10 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
     }));
   }
 
-  async #queueCompletionEmail(threadId: string): Promise<void> {
+  async #queueCompletionNotifications(threadId: string): Promise<void> {
     const configuredName = controller.configuredAgentName(threadId);
     if (configuredName) {
+      completionSoundNotifier.enqueue(threadId);
       completionEmailNotifier.enqueue(threadId, configuredName, () => controller.completionEmailStats(threadId));
       return;
     }
@@ -129,6 +140,7 @@ export class SessionKeyAction extends SingletonAction<KeySettings> {
       if (settings.threadId?.trim() !== threadId) continue;
       const thread = controller.thread(threadId);
       const name = settings.displayName?.trim() || thread?.name || thread?.preview || "Codex agent";
+      completionSoundNotifier.enqueue(threadId);
       completionEmailNotifier.enqueue(threadId, name, () => controller.completionEmailStats(threadId));
       return;
     }

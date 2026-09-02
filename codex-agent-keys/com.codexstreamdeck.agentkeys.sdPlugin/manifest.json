@@ -199,6 +199,56 @@
       ]
     },
     {
+      "Name": "GitHub",
+      "UUID": "com.codexstreamdeck.agentkeys.github",
+      "Icon": "imgs/github",
+      "Tooltip": "Open the selected Codex session's repository on GitHub.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/github",
+          "ShowTitle": true,
+          "Title": "GITHUB",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 10,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
+      "Name": "TextEdit",
+      "UUID": "com.codexstreamdeck.agentkeys.textedit",
+      "Icon": "imgs/textedit",
+      "Tooltip": "Open a new blank plain-text document in TextEdit.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "OS": [
+        "mac"
+      ],
+      "SupportedInMultiActions": true,
+      "UserTitleEnabled": true,
+      "States": [
+        {
+          "Image": "imgs/textedit",
+          "ShowTitle": true,
+          "Title": "TEXTEDIT",
+          "TitleAlignment": "bottom",
+          "TitleColor": "#17202B",
+          "FontSize": 9,
+          "FontStyle": "Bold"
+        }
+      ]
+    },
+    {
       "Name": "Do It",
       "UUID": "com.codexstreamdeck.agentkeys.do-it",
       "Icon": "imgs/do-it",
@@ -395,9 +445,9 @@
   "Category": "Codex Agent Keys",
   "CategoryIcon": "imgs/category",
   "CodePath": "bin/plugin.js",
-  "Description": "Large, color-coded keys for pinned Codex sessions.",
+  "Description": "StreamDock-only controls for pinned Codex sessions.",
   "Icon": "imgs/plugin",
-  "Name": "Codex Agent Keys",
+  "Name": "Codex Agent Keys for StreamDock",
   "Nodejs": {
     "Version": "24"
   },

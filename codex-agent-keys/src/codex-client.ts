@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import type { RpcId } from "./approval.js";
-import type { CodexModelOption, CodexThread, RateLimitsResponse, ThreadRuntimeSettings } from "./types.js";
+import type { CodexModelOption, CodexThread, RateLimitsResponse } from "./types.js";
 
 interface Pending {
   resolve: (value: unknown) => void;
@@ -109,10 +109,6 @@ export class CodexClient extends EventEmitter {
     return this.request<RateLimitsResponse>("account/rateLimits/read", null, 15_000);
   }
 
-  async readThreadServiceTier(threadId: string): Promise<string | null> {
-    return (await this.readThreadRuntimeSettings(threadId)).serviceTier;
-  }
-
   async listModels(): Promise<CodexModelOption[]> {
     const response = await this.request<{ data?: unknown[] }>("model/list", {
       limit: 100,
@@ -136,19 +132,6 @@ export class CodexClient extends EventEmitter {
         supportedReasoningEfforts: efforts
       }];
     });
-  }
-
-  async readThreadRuntimeSettings(threadId: string): Promise<ThreadRuntimeSettings> {
-    const response = await this.request<{ model?: string; reasoningEffort?: string | null; serviceTier?: string | null }>("thread/resume", {
-      threadId,
-      excludeTurns: true
-    }, 30_000);
-    if (typeof response.model !== "string" || !response.model) throw new Error("Codex did not report this session's model");
-    return {
-      model: response.model,
-      serviceTier: typeof response.serviceTier === "string" ? response.serviceTier : null,
-      reasoningEffort: typeof response.reasoningEffort === "string" ? response.reasoningEffort : null
-    };
   }
 
   #send(message: Record<string, unknown>): void {

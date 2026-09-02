@@ -104,29 +104,68 @@ func collectTextInputs(_ element: AXUIElement, into results: inout [AXUIElement]
     for child in children { collectTextInputs(child, into: &results, depth: depth + 1) }
 }
 
-func composerNearestDictateButton(_ root: AXUIElement) -> AXUIElement? {
+func textInputCandidates(_ root: AXUIElement) -> [AXUIElement] {
+    var inputs: [AXUIElement] = []
+    collectTextInputs(root, into: &inputs)
+    return inputs.filter { input in
+        var dimensions = CGSize.zero
+        var focusable = DarwinBoolean(false)
+        var valueSettable = DarwinBoolean(false)
+        return sizeAttribute(input, into: &dimensions)
+            && dimensions.width >= 160
+            && dimensions.height >= 20
+            && dimensions.height <= 240
+            && AXUIElementIsAttributeSettable(input, kAXFocusedAttribute as CFString, &focusable) == .success
+            && focusable.boolValue
+            && AXUIElementIsAttributeSettable(input, kAXValueAttribute as CFString, &valueSettable) == .success
+            && valueSettable.boolValue
+    }
+}
+
+func composerHint(_ input: AXUIElement) -> Bool {
+    let names = [
+        kAXDescriptionAttribute as String,
+        kAXTitleAttribute as String,
+        kAXPlaceholderValueAttribute as String,
+        kAXIdentifierAttribute as String,
+        kAXHelpAttribute as String
+    ]
+    let metadata = names.compactMap { attribute(input, $0) as? String }.joined(separator: " ").lowercased()
+    return ["composer", "message", "prompt", "ask codex"].contains { metadata.contains($0) }
+}
+
+func composerNearestDictateButton(_ root: AXUIElement, candidates: [AXUIElement]) -> AXUIElement? {
     guard let button = findButton(root, description: "Stop dictation") ?? findButton(root, description: "Dictate") else { return nil }
     var buttonOrigin = CGPoint.zero
     var buttonSize = CGSize.zero
     guard pointAttribute(button, kAXPositionAttribute, into: &buttonOrigin),
           sizeAttribute(button, into: &buttonSize) else { return nil }
     let buttonCenter = CGPoint(x: buttonOrigin.x + buttonSize.width / 2, y: buttonOrigin.y + buttonSize.height / 2)
-    var inputs: [AXUIElement] = []
-    collectTextInputs(root, into: &inputs)
-    return inputs.compactMap { input -> (AXUIElement, CGFloat)? in
+    return candidates.compactMap { input -> (AXUIElement, CGFloat)? in
         var origin = CGPoint.zero
         var dimensions = CGSize.zero
-        var focusable = DarwinBoolean(false)
         guard pointAttribute(input, kAXPositionAttribute, into: &origin),
-              sizeAttribute(input, into: &dimensions),
-              dimensions.width >= 160,
-              dimensions.height >= 20,
-              AXUIElementIsAttributeSettable(input, kAXFocusedAttribute as CFString, &focusable) == .success,
-              focusable.boolValue else { return nil }
+              sizeAttribute(input, into: &dimensions) else { return nil }
         let inputEdge = CGPoint(x: origin.x + dimensions.width, y: origin.y + dimensions.height)
         let distance = hypot(inputEdge.x - buttonCenter.x, inputEdge.y - buttonCenter.y)
         return (input, distance)
     }.min(by: { $0.1 < $1.1 })?.0
+}
+
+func findComposer(_ root: AXUIElement) -> AXUIElement? {
+    let candidates = textInputCandidates(root)
+    if let nearby = composerNearestDictateButton(root, candidates: candidates) { return nearby }
+
+    let hinted = candidates.filter(composerHint)
+    if hinted.count == 1 { return hinted[0] }
+
+    // Electron currently exposes the task composer as the only compact,
+    // writable text area in the focused task window. Refuse to guess when
+    // another editor or terminal makes that selection ambiguous.
+    let textAreas = candidates.filter {
+        attribute($0, kAXRoleAttribute) as? String == kAXTextAreaRole as String
+    }
+    return textAreas.count == 1 ? textAreas[0] : nil
 }
 
 func focusByClick(_ element: AXUIElement, source: CGEventSource) -> Bool {
@@ -170,13 +209,13 @@ func composerText(for command: Command) -> String? {
 
 if let composerText = composerText(for: command) {
     let applicationRoot = AXUIElementCreateApplication(app.processIdentifier)
-    let focusedWindow = attribute(applicationRoot, kAXFocusedWindowAttribute)
-    let root = focusedWindow != nil && CFGetTypeID(focusedWindow!) == AXUIElementGetTypeID()
-        ? focusedWindow as! AXUIElement
-        : applicationRoot
     var composer: AXUIElement?
-    for _ in 0..<20 {
-        composer = composerNearestDictateButton(root)
+    for _ in 0..<40 {
+        let focusedWindow = attribute(applicationRoot, kAXFocusedWindowAttribute)
+        let root = focusedWindow != nil && CFGetTypeID(focusedWindow!) == AXUIElementGetTypeID()
+            ? focusedWindow as! AXUIElement
+            : applicationRoot
+        composer = findComposer(root)
         if composer != nil { break }
         Thread.sleep(forTimeInterval: 0.1)
     }

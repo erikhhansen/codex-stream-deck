@@ -7,6 +7,7 @@ import { readConfiguredAgents } from "./configured-agents.js";
 import { CodexDesktopIpcClient, type CodexDesktopThreadSettings } from "./desktop-ipc.js";
 import { DesktopSettingsConvergence } from "./desktop-settings-convergence.js";
 import { didFinishWork, readSessionActivity } from "./session-activity.js";
+import { readSessionRuntimeSettings, type LocalThreadRuntimeSettings } from "./session-runtime-settings.js";
 import { getGlobalSettings, rememberGlobalSettings, setGlobalSettings } from "./global-settings.js";
 import { normalizeThreadId, requireThreadId } from "./selection.js";
 import { statusFor } from "./status.js";
@@ -21,9 +22,15 @@ export interface DesktopSettingsClient {
   close(): void;
 }
 
+export type SessionRuntimeSettingsReader = (
+  threadId: string,
+  filePath: string | undefined
+) => Promise<LocalThreadRuntimeSettings>;
+
 export class AgentKeysController {
   readonly #client: CodexClient;
   readonly #desktopSettingsClient: DesktopSettingsClient;
+  readonly #sessionRuntimeSettingsReader: SessionRuntimeSettingsReader;
   readonly #desktopSettingsConvergence: DesktopSettingsConvergence;
   readonly #listeners = new Set<() => void>();
   readonly #completionListeners = new Set<(threadId: string) => void>();
@@ -55,9 +62,14 @@ export class AgentKeysController {
   #readingActivity = false;
   #stopping = false;
 
-  constructor(client = new CodexClient(), desktopSettingsClient: DesktopSettingsClient = new CodexDesktopIpcClient()) {
+  constructor(
+    client = new CodexClient(),
+    desktopSettingsClient: DesktopSettingsClient = new CodexDesktopIpcClient(),
+    sessionRuntimeSettingsReader: SessionRuntimeSettingsReader = readSessionRuntimeSettings
+  ) {
     this.#client = client;
     this.#desktopSettingsClient = desktopSettingsClient;
+    this.#sessionRuntimeSettingsReader = sessionRuntimeSettingsReader;
     this.#desktopSettingsConvergence = new DesktopSettingsConvergence(desktopSettingsClient, {
       onRetryError: (threadId, error) => {
         const message = error instanceof Error ? error.message : "unknown error";
@@ -291,12 +303,22 @@ export class AgentKeysController {
   async refreshRuntimeSettings(threadId: string): Promise<ThreadRuntimeSettings> {
     const selected = requireThreadId(threadId);
     if (this.thread(selected)?.archived) throw new Error("The selected Codex session is archived");
-    if (!this.#client.connected) await this.reconnect();
-    if (!this.#client.connected) throw new Error(this.#lastError || "Codex is not connected");
+    const sessionPath = this.thread(selected)?.path;
     const current = this.#runtimeSettingsRefreshes.get(selected);
     if (current) return current;
-    const refresh = this.#client.readThreadRuntimeSettings(selected).then((reportedSettings) => {
-      const settings = this.#mergeReportedSettings(selected, reportedSettings) as ThreadRuntimeSettings;
+    const refresh = this.#sessionRuntimeSettingsReader(selected, sessionPath).then((reportedSettings) => {
+      const merged = this.#mergeReportedSettings(selected, reportedSettings);
+      const model = merged.model ?? this.#models.get(selected);
+      if (!model) throw new Error("The selected Codex session has not reported its model locally");
+      const settings: ThreadRuntimeSettings = {
+        model,
+        serviceTier: Object.hasOwn(merged, "serviceTier")
+          ? merged.serviceTier!
+          : this.#serviceTiers.get(selected) ?? null,
+        reasoningEffort: Object.hasOwn(merged, "reasoningEffort")
+          ? merged.reasoningEffort!
+          : this.#efforts.get(selected) ?? null
+      };
       const changed = this.#serviceTiers.get(selected) !== settings.serviceTier
         || this.#models.get(selected) !== settings.model
         || this.#efforts.get(selected) !== settings.reasoningEffort;
@@ -313,12 +335,10 @@ export class AgentKeysController {
   async recoverApproval(threadId: string): Promise<boolean> {
     const selected = requireThreadId(threadId);
     if (this.isWaitingForApproval(selected)) return true;
-    const waiting = this.thread(selected)?.status?.activeFlags?.includes("waitingOnApproval") ?? false;
-    if (!waiting) return false;
-    await this.refreshRuntimeSettings(selected);
-    if (this.isWaitingForApproval(selected)) return true;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    return this.isWaitingForApproval(selected);
+    // Never resume a Desktop-owned thread to recover an approval: thread/resume
+    // acquires its writer lock. Only requests already delivered to this client
+    // can be answered safely.
+    return false;
   }
 
   respondToApproval(threadId: string, choice: ApprovalChoice): void {
